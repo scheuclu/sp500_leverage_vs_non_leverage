@@ -1,0 +1,30 @@
+name: main
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:  # allows manual triggering too
+
+jobs:
+  sync_positions:
+    runs-on: ubuntu-latest
+
+    env:
+      TRADING212_KEY: ${{ secrets.TRADING212_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run Trading212 → Supabase sync
+        run: uv run python main.py
