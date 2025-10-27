@@ -40,9 +40,7 @@ positions = [Position(**i) for i in response.json()]
 
 from supabase import Client, create_client
 
-supabase: Client = create_client(
-    SUPABASE_URL, SUPABASE_KEY
-)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 response = (
     supabase.table("data")

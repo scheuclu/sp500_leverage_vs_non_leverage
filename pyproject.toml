@@ -5,8 +5,10 @@ description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "datamodel-code-generator>=0.35.0",
+    "plotly>=6.3.1",
     "python-dotenv>=1.1.1",
     "requests>=2.32.5",
     "ruff>=0.14.2",
+    "streamlit>=1.50.0",
     "supabase>=2.22.2",
 ]
