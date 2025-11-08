@@ -1,0 +1,18 @@
+app = "trading212-supabase-bot"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+
+[deploy]
+  release_command = ""
+
+[[services]]
+  internal_port = 8080
+  processes = ["app"]
+  protocol = "tcp"
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
