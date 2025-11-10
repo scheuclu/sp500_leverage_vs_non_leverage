@@ -1,17 +1,23 @@
 import os
 
 import requests
-from models import TradableInstrument, Exchange, WorkingSchedule, Position, TimeEvent, Type3
+from models import (
+    TradableInstrument,
+    Exchange,
+    WorkingSchedule,
+    Position,
+    TimeEvent,
+    Type3,
+)
 from dotenv import load_dotenv
 from supabase import Client, create_client
+
 load_dotenv()
 import time
 
 TRADING212_KEY = os.environ["TRADING212_KEY"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
-
-
 
 
 import datetime
@@ -25,12 +31,6 @@ import datetime
 #         return f"TzInfo({int(self.offset.total_seconds() / 3600)})"
 #     def dst(self, dt):
 #         return datetime.timedelta(0)
-
-
-
-
-
-
 
 
 url = "https://demo.trading212.com/api/v0/equity/metadata/instruments"
@@ -52,9 +52,8 @@ instruments = {d["ticker"]: TradableInstrument(**d) for d in response.json()}
 
 def is_exchange_open(timeEvents: list[TimeEvent]):
     now = datetime.datetime.now(datetime.timezone.utc)
-    last_event=[t for t in timeEvents if t.date<now ][-1]
-    return last_event.type==Type3.OPEN
-
+    last_event = [t for t in timeEvents if t.date < now][-1]
+    return last_event.type == Type3.OPEN
 
 
 url = "https://demo.trading212.com/api/v0/equity/metadata/exchanges"
@@ -85,7 +84,6 @@ while True:
     all_open = all([is_exchange_open(w.timeEvents) for w in ws])
 
     if all_open:
-
         supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
         response = (
             supabase.table("data")
@@ -95,6 +93,7 @@ while True:
         print(response)
     else:
         print("Not all open")
+        time.sleep(300)  # Wait 5 minutes to check for open exchange
 
     # Schedule the next run based on absolute time
     next_run += INTERVAL
