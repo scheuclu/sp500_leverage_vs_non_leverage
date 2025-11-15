@@ -22,6 +22,7 @@ import time
 from tgbot import send_message
 from enum import Enum
 from datetime import datetime, timedelta
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -49,13 +50,10 @@ class State(Enum):
         self.cash = cash
 
 
-from pydantic import BaseModel, Field
-
-
 class SignalData(BaseModel):
     time_last_base_change: datetime
-    base_value_at_last_change: float
-    lev_value_at_last_change: float
+    base_value_at_last_change: float = Field(default=0.0, description="TODO")
+    lev_value_at_last_change: float = Field(default=0.0, description="TODO")
 
 
 def wait_for_order_or_cancel(id: int, max_wait_seconds: int) -> bool:
@@ -159,7 +157,8 @@ if __name__ == "__main__":
                 order: Order = place_limit_order(
                     LimitOrder(
                         ticker=Trading212Ticker.SP500_ACC,
-                        quantity=base_position.quantity-0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
+                        quantity=base_position.quantity
+                        - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
                         limit_price=base_position.currentPrice * 0.9999,  # TODO
                         type=LimitOrderType.SELL,
                     )

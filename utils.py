@@ -14,7 +14,7 @@ def is_exchange_open(timeEvents: list[TimeEvent] | None):
     if not timeEvents:
         return None
     now = datetime.datetime.now(datetime.timezone.utc)
-    last_event = [t for t in timeEvents if t.date < now][-1] #type: ignore
+    last_event = [t for t in timeEvents if t.date < now][-1]  # type: ignore
     return last_event.type == Type3.OPEN
 
 
