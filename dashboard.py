@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from plotly.subplots import make_subplots
 import plotly.io as pio
 import math
+
 pio.renderers.default = "browser"
 import numpy as np
 import pandas as pd
@@ -38,10 +39,10 @@ date_str = "2025-10-28T08:47:00.425164+00:00"
 dt = datetime.fromisoformat(date_str)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-FX=0.9999
-MIN_MOVE=8
+FX = 0.9999
+MIN_MOVE = 8
 
-MIN_SECONDS=200
+MIN_SECONDS = 200
 
 ###
 all_data = []
@@ -63,7 +64,9 @@ while True:
     offset += batch_size
 
 
-unique_dates = sorted(list(set([datetime.fromisoformat(d["created_at"]).date() for d in all_data])))
+unique_dates = sorted(
+    list(set([datetime.fromisoformat(d["created_at"]).date() for d in all_data]))
+)
 
 
 class DateData(BaseModel):
@@ -94,18 +97,23 @@ for row in all_data:
 
 # Compute buy and sell signals
 from enum import Enum
-class State(Enum):
-    INVESTED_IN_LEVERAGE=0
-    INVESTED_IN_NON_LEVERAGE=1
-    READY_TO_INVEST=2
 
-    def __init__(self, code, num_shares_leverage=0, num_shares_non_leverage=0, cash=10000):
+
+class State(Enum):
+    INVESTED_IN_LEVERAGE = 0
+    INVESTED_IN_NON_LEVERAGE = 1
+    READY_TO_INVEST = 2
+
+    def __init__(
+        self, code, num_shares_leverage=0, num_shares_non_leverage=0, cash=10000
+    ):
         self.code = code
         self.num_shares_leverage = num_shares_leverage
         self.num_shares_non_leverage = num_shares_non_leverage
         self.cash = cash
 
-trader_state=State.READY_TO_INVEST
+
+trader_state = State.READY_TO_INVEST
 for d, datedata in data.items():
     current_base_value = datedata.non_leveraged_prices[0]
     lev_at_current_base_value = datedata.leveraged_prices[0]
@@ -115,11 +123,15 @@ for d, datedata in data.items():
     ):
         if base == current_base_value:
             lev_move = lev - lev_at_current_base_value
-            if trader_state==State.READY_TO_INVEST and  lev_move > MIN_MOVE and (dt - current_base_value_since).seconds > MIN_SECONDS:
+            if (
+                trader_state == State.READY_TO_INVEST
+                and lev_move > MIN_MOVE
+                and (dt - current_base_value_since).seconds > MIN_SECONDS
+            ):
                 datedata.buy_signal_times.append(dt)
-                trader_state=State.INVESTED_IN_NON_LEVERAGE
-                trader_state.num_shares_non_leverage=trader_state.cash/base
-                trader_state.cash=0
+                trader_state = State.INVESTED_IN_NON_LEVERAGE
+                trader_state.num_shares_non_leverage = trader_state.cash / base
+                trader_state.cash = 0
                 # buys['x'].append(dt)
                 # buys['y'].append(base)
             # if trader_state==State.READY_TO_INVEST and  lev_move < -10 and (dt - current_base_value_since).seconds > MIN_SECONDS:
@@ -127,10 +139,10 @@ for d, datedata in data.items():
             #     # sells['y'].append(base)
             #     datedata.sell_signal_times.append(dt)
         else:
-            if trader_state==State.INVESTED_IN_NON_LEVERAGE:
-                trader_state=State.READY_TO_INVEST
-                trader_state.cash=base*trader_state.num_shares_non_leverage
-                trader_state.num_shares_non_leverage=0
+            if trader_state == State.INVESTED_IN_NON_LEVERAGE:
+                trader_state = State.READY_TO_INVEST
+                trader_state.cash = base * trader_state.num_shares_non_leverage
+                trader_state.num_shares_non_leverage = 0
                 datedata.sell_signal_times.append(dt)
             current_base_value = base
             current_base_value_since = dt
@@ -138,23 +150,40 @@ for d, datedata in data.items():
             lev_move = 0
         datedata.lev_moves.append(lev_move)
 
-st.text(str([trader_state.cash, trader_state.num_shares_leverage, trader_state.num_shares_non_leverage]))
+st.text(
+    str(
+        [
+            trader_state.cash,
+            trader_state.num_shares_leverage,
+            trader_state.num_shares_non_leverage,
+        ]
+    )
+)
 
 selected_date = st.selectbox(label="aaa", options=data.keys())
 
 
 st.text(str(data[selected_date].buy_signal_times))
-buy_prices=[p for t,p in zip(data[selected_date].times,data[selected_date].non_leveraged_prices) if t in data[selected_date].buy_signal_times]
-sell_prices=[p for t,p in zip(data[selected_date].times,data[selected_date].non_leveraged_prices) if t in data[selected_date].sell_signal_times]
-
+buy_prices = [
+    p
+    for t, p in zip(data[selected_date].times, data[selected_date].non_leveraged_prices)
+    if t in data[selected_date].buy_signal_times
+]
+sell_prices = [
+    p
+    for t, p in zip(data[selected_date].times, data[selected_date].non_leveraged_prices)
+    if t in data[selected_date].sell_signal_times
+]
 
 
 st.text(str(buy_prices))
 
-factors=[ s/b*FX for b,s in zip(buy_prices,sell_prices)]
-total=math.prod(factors)
+factors = [s / b * FX for b, s in zip(buy_prices, sell_prices)]
+total = math.prod(factors)
 
-st.text(f"Total {100*round(total-1,4)}% corresponds to {100*round(total**251-1,4)}% per year")
+st.text(
+    f"Total {100 * round(total - 1, 4)}% corresponds to {100 * round(total**251 - 1, 4)}% per year"
+)
 st.text(str(factors))
 
 st.text(str(sell_prices))
@@ -163,13 +192,15 @@ st.text(str(sell_prices))
 st.text(str(data[selected_date].sell_signal_times))
 
 
-
-
-fig = make_subplots( specs=[
+fig = make_subplots(
+    specs=[
         [{"secondary_y": True}],  # row 1
         [{"secondary_y": True}],  # row 2
     ],
-    shared_xaxes=True, rows=2, cols=1)
+    shared_xaxes=True,
+    rows=2,
+    cols=1,
+)
 trace_non_leverage = go.Scatter(
     x=data[selected_date].times,
     y=data[selected_date].non_leveraged_prices,
@@ -195,9 +226,6 @@ for t in data[selected_date].sell_signal_times:
     fig.add_vline(x=t, line=dict(color="red", width=1))
 
 # st.plotly_chart(fig, use_container_width=True)
-
-
-
 
 
 trace_lev_move = go.Scatter(
