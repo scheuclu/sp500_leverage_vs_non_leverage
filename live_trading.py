@@ -1,5 +1,5 @@
 import os
-
+import logging
 from more_itertools.recipes import quantify
 
 from models import TradableInstrument, Position, Exchange, Order, Cash
@@ -23,6 +23,13 @@ from tgbot import send_message
 from enum import Enum
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
+
+logging.basicConfig(
+    level=logging.INFO,  # <- this is the key bit
+    format="[{asctime}] {levelname}:{name}: {message}",
+    style="{",
+    force=True,  # <- useful if something configured logging before
+)
 
 load_dotenv()
 
@@ -87,6 +94,7 @@ if __name__ == "__main__":
 
     while True:
         start = time.time()
+        logging.info(f"{trader_state}")
 
         # Fetch positions if exchanges are open
         ticker_values: list[str] = [
@@ -120,10 +128,14 @@ if __name__ == "__main__":
                     signal_data.time_last_base_change = curdatetime
                     signal_data.base_value_at_last_change = base_position.currentPrice
                     signal_data.lev_value_at_last_change = lev_position.currentPrice
+                    logging.info("Base price updated")
                 else:
                     lev_diff_rel = (
                         lev_position.currentPrice - signal_data.lev_value_at_last_change
                     ) / signal_data.lev_value_at_last_change
+                    logging.info(
+                        f"{round(lev_diff_rel, 4)} | {curdatetime - signal_data.time_last_base_change}"
+                    )
                     if (
                         lev_diff_rel > LEV_DIFF_INVEST
                         and curdatetime - signal_data.time_last_base_change
@@ -154,6 +166,7 @@ if __name__ == "__main__":
                             trader_state = State.INVESTED_IN_NON_LEVERAGE  # TODO
                             send_message("Buy order succeeded")
             case State.INVESTED_IN_NON_LEVERAGE:
+                send_message("Placing sell order")
                 order: Order = place_limit_order(
                     LimitOrder(
                         ticker=Trading212Ticker.SP500_ACC,
@@ -164,6 +177,23 @@ if __name__ == "__main__":
                     )
                 )
                 ID = order.id
+
                 filled = wait_for_order_or_cancel(id=order.id, max_wait_seconds=3 * 60)
+                if not filled:
+                    trader_state = trader_state.ORDER_FAILED
+                    send_message("Sell order failed")
+                else:
+                    trader_state = State.INITIALIZING  # TODO
+                    send_message("Sell order succeeded")
+
             case _:
                 raise "Unknown state"
+
+        # Schedule the next run based on absolute time
+        next_run += INTERVAL
+        sleep_time = next_run - time.time()
+        logging.info(f"Sleeping for {round(sleep_time, 4)} s.")
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+        else:  # If we’re running behind schedule, skip missed intervals
+            next_run = time.time()
