@@ -147,14 +147,19 @@ if __name__ == "__main__":
                         send_message(
                             f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
                         )
-                        order: Order = place_limit_order(
-                            LimitOrder(
-                                ticker=Trading212Ticker.SP500_ACC,
-                                quantity=quantity * 0.99,  # TODO
-                                limit_price=base_position.currentPrice * 1.0001,  # TODO
-                                type=LimitOrderType.BUY,
+                        try:
+                            order: Order = place_limit_order(
+                                LimitOrder(
+                                    ticker=Trading212Ticker.SP500_ACC,
+                                    quantity=quantity * 0.7,  # TODO
+                                    limit_price=base_position.currentPrice * 1.0001,  # TODO
+                                    type=LimitOrderType.BUY,
+                                )
                             )
-                        )
+                        except Exception as e:
+                            send_message(f"Erro placing buy order: {str(e)}")
+                            trader_state = State.ORDER_FAILED
+                            continue
                         ID = order.id
                         filled = wait_for_order_or_cancel(
                             id=order.id, max_wait_seconds=3 * 60
@@ -166,25 +171,35 @@ if __name__ == "__main__":
                             trader_state = State.INVESTED_IN_NON_LEVERAGE  # TODO
                             send_message("Buy order succeeded")
             case State.INVESTED_IN_NON_LEVERAGE:
-                send_message("Placing sell order")
-                order: Order = place_limit_order(
-                    LimitOrder(
-                        ticker=Trading212Ticker.SP500_ACC,
-                        quantity=base_position.quantity
-                        - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                        limit_price=base_position.currentPrice * 0.9999,  # TODO
-                        type=LimitOrderType.SELL,
-                    )
-                )
-                ID = order.id
+                #TODO wait for base price to increase
+                if base_position.currentPrice != signal_data.base_value_at_last_change:
+                    signal_data.time_last_base_change = curdatetime
+                    signal_data.base_value_at_last_change = base_position.currentPrice
+                    signal_data.lev_value_at_last_change = lev_position.currentPrice
+                    send_message("Placing sell order")
+                    try:
+                        order: Order = place_limit_order(
+                            LimitOrder(
+                                ticker=Trading212Ticker.SP500_ACC,
+                                quantity=base_position.quantity
+                                - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
+                                limit_price=base_position.currentPrice * 0.9999,  # TODO
+                                type=LimitOrderType.SELL,
+                            )
+                        )
+                    except Exception as e:
+                        send_message(f"Erro placing order: {str(e)}")
+                        trader_state=State.ORDER_FAILED
+                        continue
+                    ID = order.id
 
-                filled = wait_for_order_or_cancel(id=order.id, max_wait_seconds=3 * 60)
-                if not filled:
-                    trader_state = trader_state.ORDER_FAILED
-                    send_message("Sell order failed")
-                else:
-                    trader_state = State.INITIALIZING  # TODO
-                    send_message("Sell order succeeded")
+                    filled = wait_for_order_or_cancel(id=order.id, max_wait_seconds=3 * 60)
+                    if not filled:
+                        trader_state = trader_state.ORDER_FAILED
+                        send_message("Sell order failed")
+                    else:
+                        trader_state = State.INITIALIZING  # TODO
+                        send_message("Sell order succeeded")
 
             case _:
                 raise "Unknown state"

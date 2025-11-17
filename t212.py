@@ -154,10 +154,10 @@ def place_limit_order(order: LimitOrder) -> Order:
     url = "https://demo.trading212.com/api/v0/equity/orders/limit"
 
     payload = {
-        "quantity": order.quantity
+        "quantity": round(order.quantity,2)
         if order.type == LimitOrderType.BUY
         else -order.quantity,  # 0.01
-        "limitPrice": order.limit_price,  # 2960
+        "limitPrice": round(order.limit_price,3),  # 2960
         "ticker": order.ticker.value,
         "timeValidity": "DAY",
     }
@@ -210,8 +210,20 @@ def fetch_exchanges() -> list[Exchange]:
 
 
 if __name__ == "__main__":
-    result = fetch_single_holding(Trading212Ticker.AAPL)
-    print(result)
+
+
+
+    order: Order|ToolError = place_limit_order(
+        LimitOrder(
+        ticker=Trading212Ticker.SP500_ACC,
+        quantity=30.83025830258302,
+        limit_price=98.3828373,
+        type=LimitOrderType.BUY
+    ))
+
+
+    # result = fetch_single_holding(Trading212Ticker.AAPL)
+    # print(result)
 
     # # Buy as much as possible
     # free_cash: Cash = fetch_account_cash()
