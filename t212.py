@@ -189,7 +189,6 @@ def has_order_been_filled(id: int):
     url = f"https://demo.trading212.com/api/v0/equity/orders/{id}"
 
     response = requests.get(url, headers=headers)
-    print(response)
     return response.status_code == 404
 
 
