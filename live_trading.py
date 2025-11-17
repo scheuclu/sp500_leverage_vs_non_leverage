@@ -37,7 +37,7 @@ TRADING212_KEY = os.environ["TRADING212_KEY"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 
-LEV_DIFF_INVEST = 1.0005
+LEV_DIFF_INVEST = 0.0005
 TIME_DIFF_INVEST = timedelta(minutes=10)
 
 
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     instruments: list[TradableInstrument] = fetch_instruments()
     exchanges: list[Exchange] = fetch_exchanges()
 
-    INTERVAL = 30  # seconds
+    INTERVAL = 20  # seconds
 
     next_run = time.time()
 
