@@ -38,7 +38,7 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 
 LEV_DIFF_INVEST = 0.0005
-TIME_DIFF_INVEST = timedelta(minutes=10)
+TIME_DIFF_INVEST = timedelta(minutes=5)
 
 
 class State(Enum):
@@ -65,6 +65,8 @@ class SignalData(BaseModel):
 
 def wait_for_order_or_cancel(id: int, max_wait_seconds: int) -> bool:
     order_filled = has_order_been_filled(id)
+    if order_filled:
+        return True
     start = time.time()
     while not order_filled:
         print("Order is still open")
