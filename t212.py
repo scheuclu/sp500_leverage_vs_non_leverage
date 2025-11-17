@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 from pydantic import BaseModel, Field
+from tgbot import send_message
 
 TRADING212_KEY = os.environ["TRADING212_KEY"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
@@ -164,7 +165,10 @@ def place_limit_order(order: LimitOrder) -> Order:
 
     print(payload)
 
+    send_message(f"Placing limit order: {payload}")
+
     response = requests.post(url, json=payload, headers=headers)
+    send_message(f".... {response.text}")
     response.raise_for_status()
 
     data = response.json()
