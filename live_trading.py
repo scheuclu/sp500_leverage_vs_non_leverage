@@ -69,12 +69,14 @@ def wait_for_order_or_cancel(id: int, max_wait_seconds: int) -> bool:
     while not order_filled:
         print("Order is still open")
         order_filled = has_order_been_filled(id)
+        if order_filled:
+            return True
         time.sleep(1.1)  # time limit
         if time.time() - start > max_wait_seconds:
             success = cancel_order_by_id(id)
             assert success
             return False
-    return True
+    return False
 
 
 if __name__ == "__main__":
@@ -183,7 +185,7 @@ if __name__ == "__main__":
                                 ticker=Trading212Ticker.SP500_ACC,
                                 quantity=base_position.quantity
                                 - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                                limit_price=base_position.currentPrice * 0.9999,  # TODO
+                                limit_price=base_position.currentPrice * 0.9997,  # TODO
                                 type=LimitOrderType.SELL,
                             )
                         )
