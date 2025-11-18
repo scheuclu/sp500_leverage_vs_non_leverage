@@ -176,20 +176,20 @@ if __name__ == "__main__":
                                     type=LimitOrderType.BUY,
                                 )
                             )
+                            ID = order.id
+                            filled = wait_for_order_or_cancel(
+                                id=order.id, max_wait_seconds=3 * 60
+                            )
+                            if not filled:
+                                trader_state = trader_state.ORDER_FAILED
+                                send_message("Buy order failed")
+                            else:
+                                trader_state = State.INVESTED_IN_NON_LEVERAGE  # TODO
+                                send_message("Buy order succeeded")
                         except Exception as e:
                             send_message(f"Erro placing buy order: {str(e)}")
                             trader_state = State.ORDER_FAILED
-                            continue
-                        ID = order.id
-                        filled = wait_for_order_or_cancel(
-                            id=order.id, max_wait_seconds=3 * 60
-                        )
-                        if not filled:
-                            trader_state = trader_state.ORDER_FAILED
-                            send_message("Buy order failed")
-                        else:
-                            trader_state = State.INVESTED_IN_NON_LEVERAGE  # TODO
-                            send_message("Buy order succeeded")
+
             case State.INVESTED_IN_NON_LEVERAGE:
                 # TODO wait for base price to increase
                 if base_position.currentPrice != signal_data.base_value_at_last_change:
@@ -197,6 +197,7 @@ if __name__ == "__main__":
                     signal_data.base_value_at_last_change = base_position.currentPrice
                     signal_data.lev_value_at_last_change = lev_position.currentPrice
                     send_message("Placing sell order")
+                    time.sleep(2)  # because we may just have made a buy order
                     try:
                         order: Order = place_limit_order(
                             LimitOrder(
@@ -207,21 +208,20 @@ if __name__ == "__main__":
                                 type=LimitOrderType.SELL,
                             )
                         )
+                        ID = order.id
+
+                        filled = wait_for_order_or_cancel(
+                            id=order.id, max_wait_seconds=3 * 60
+                        )
+                        if not filled:
+                            trader_state = trader_state.ORDER_FAILED
+                            send_message("Sell order failed")
+                        else:
+                            trader_state = State.INITIALIZING  # TODO
+                            send_message("Sell order succeeded")
                     except Exception as e:
                         send_message(f"Erro placing order: {str(e)}")
                         trader_state = State.ORDER_FAILED
-                        continue
-                    ID = order.id
-
-                    filled = wait_for_order_or_cancel(
-                        id=order.id, max_wait_seconds=3 * 60
-                    )
-                    if not filled:
-                        trader_state = trader_state.ORDER_FAILED
-                        send_message("Sell order failed")
-                    else:
-                        trader_state = State.INITIALIZING  # TODO
-                        send_message("Sell order succeeded")
 
             case State.ORDER_FAILED:
                 send_message("Landed in order failed. Will Re-initialize")

@@ -1,3 +1,5 @@
+import logging
+
 import requests
 from models import Order, Position, Cash, TradableInstrument, Exchange
 from dotenv import load_dotenv
@@ -6,6 +8,13 @@ load_dotenv()
 import os
 from pydantic import BaseModel, Field
 from tgbot import send_message
+
+logging.basicConfig(
+    level=logging.INFO,  # <- this is the key bit
+    format="[{asctime}] {levelname}:{name}: {message}",
+    style="{",
+    force=True,  # <- useful if something configured logging before
+)
 
 TRADING212_KEY = os.environ["TRADING212_KEY"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
@@ -201,7 +210,9 @@ def place_market_order(order: MarketOrder) -> Order:
 
     print(payload)
 
-    send_message(f"Placing market order: {payload}")
+    message = f"Placing market order: {payload}"
+    logging.info(f"Sending message: {message}")
+    send_message(message)
 
     response = requests.post(url, json=payload, headers=headers)
     send_message(f".... {response.text}")
