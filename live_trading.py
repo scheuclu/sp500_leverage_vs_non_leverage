@@ -16,6 +16,7 @@ from t212 import (
     has_order_been_filled,
     cancel_order_by_id,
     fetch_account_cash,
+    cancel_open_orders,
 )
 from utils import are_positions_tradeable
 import time
@@ -39,6 +40,9 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 
 LEV_DIFF_INVEST = 0.0005
 TIME_DIFF_INVEST = timedelta(minutes=5)
+
+# LEV_DIFF_INVEST = 0.0001
+# TIME_DIFF_INVEST = timedelta(minutes=1)
 
 
 class State(Enum):
@@ -120,6 +124,17 @@ if __name__ == "__main__":
 
         match trader_state:
             case State.INITIALIZING:
+                cancel_open_orders()
+                # Sell holdings in base
+                if base_position.quantity > 0.1:
+                    order: Order = place_limit_order(
+                        LimitOrder(
+                            ticker=Trading212Ticker.SP500_ACC,
+                            quantity=base_position.quantity - 0.1,
+                            limit_price=base_position.currentPrice * 0.9997,  # TODO
+                            type=LimitOrderType.SELL,
+                        )
+                    )
                 signal_data.time_last_base_change = curdatetime
                 signal_data.base_value_at_last_change = base_position.currentPrice
                 signal_data.lev_value_at_last_change = lev_position.currentPrice
@@ -156,7 +171,8 @@ if __name__ == "__main__":
                                 LimitOrder(
                                     ticker=Trading212Ticker.SP500_ACC,
                                     quantity=quantity * 0.7,  # TODO
-                                    limit_price=base_position.currentPrice * 1.0001,  # TODO
+                                    limit_price=base_position.currentPrice
+                                    * 1.0001,  # TODO
                                     type=LimitOrderType.BUY,
                                 )
                             )
@@ -175,7 +191,7 @@ if __name__ == "__main__":
                             trader_state = State.INVESTED_IN_NON_LEVERAGE  # TODO
                             send_message("Buy order succeeded")
             case State.INVESTED_IN_NON_LEVERAGE:
-                #TODO wait for base price to increase
+                # TODO wait for base price to increase
                 if base_position.currentPrice != signal_data.base_value_at_last_change:
                     signal_data.time_last_base_change = curdatetime
                     signal_data.base_value_at_last_change = base_position.currentPrice
@@ -187,17 +203,19 @@ if __name__ == "__main__":
                                 ticker=Trading212Ticker.SP500_ACC,
                                 quantity=base_position.quantity
                                 - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                                limit_price=base_position.currentPrice * 0.9997,  # TODO
+                                limit_price=base_position.currentPrice * 0.9995,  # TODO
                                 type=LimitOrderType.SELL,
                             )
                         )
                     except Exception as e:
                         send_message(f"Erro placing order: {str(e)}")
-                        trader_state=State.ORDER_FAILED
+                        trader_state = State.ORDER_FAILED
                         continue
                     ID = order.id
 
-                    filled = wait_for_order_or_cancel(id=order.id, max_wait_seconds=3 * 60)
+                    filled = wait_for_order_or_cancel(
+                        id=order.id, max_wait_seconds=3 * 60
+                    )
                     if not filled:
                         trader_state = trader_state.ORDER_FAILED
                         send_message("Sell order failed")
@@ -205,6 +223,9 @@ if __name__ == "__main__":
                         trader_state = State.INITIALIZING  # TODO
                         send_message("Sell order succeeded")
 
+            case State.ORDER_FAILED:
+                send_message("Landed in order failed. Will Re-initialize")
+                trader_state = trader_state.INITIALIZING
             case _:
                 raise "Unknown state"
 

@@ -143,6 +143,11 @@ class LimitOrderType(Enum):
     SELL = 1
 
 
+class MarketOrderType(Enum):
+    BUY = 0
+    SELL = 1
+
+
 class LimitOrder(BaseModel):
     ticker: Trading212Ticker
     quantity: float = Field(gt=0.0)
@@ -150,15 +155,21 @@ class LimitOrder(BaseModel):
     type: LimitOrderType
 
 
+class MarketOrder(BaseModel):
+    ticker: Trading212Ticker
+    quantity: float = Field(gt=0.0)
+    type: MarketOrderType
+
+
 def place_limit_order(order: LimitOrder) -> Order:
     """Selling means negative quantity"""
     url = "https://demo.trading212.com/api/v0/equity/orders/limit"
 
     payload = {
-        "quantity": round(order.quantity,2)
+        "quantity": round(order.quantity, 2)
         if order.type == LimitOrderType.BUY
         else -order.quantity,  # 0.01
-        "limitPrice": round(order.limit_price,3),  # 2960
+        "limitPrice": round(order.limit_price, 3),  # 2960
         "ticker": order.ticker.value,
         "timeValidity": "DAY",
     }
@@ -173,6 +184,30 @@ def place_limit_order(order: LimitOrder) -> Order:
 
     data = response.json()
     print(data)
+    return Order(**data)
+
+
+def place_market_order(order: MarketOrder) -> Order:
+    """Selling means negative quantity"""
+    url = "https://demo.trading212.com/api/v0/equity/orders/market"
+
+    payload = {
+        "extendedHours": False,
+        "quantity": round(order.quantity, 2)
+        if order.type == MarketOrderType.BUY
+        else -order.quantity,  # 0.01
+        "ticker": order.ticker.value,
+    }
+
+    print(payload)
+
+    send_message(f"Placing market order: {payload}")
+
+    response = requests.post(url, json=payload, headers=headers)
+    send_message(f".... {response.text}")
+    response.raise_for_status()
+
+    data = response.json()
     return Order(**data)
 
 
@@ -213,17 +248,11 @@ def fetch_exchanges() -> list[Exchange]:
 
 
 if __name__ == "__main__":
-
-
-
-    order: Order|ToolError = place_limit_order(
-        LimitOrder(
-        ticker=Trading212Ticker.SP500_ACC,
-        quantity=30.83025830258302,
-        limit_price=98.3828373,
-        type=LimitOrderType.BUY
-    ))
-
+    order: Order | ToolError = place_market_order(
+        MarketOrder(
+            ticker=Trading212Ticker.SP500_ACC, quantity=20.0, type=MarketOrderType.BUY
+        )
+    )
 
     # result = fetch_single_holding(Trading212Ticker.AAPL)
     # print(result)

@@ -8,4 +8,3 @@ def send_message(text: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text}
     r = requests.post(url, json=payload)
-    print(r.json())
