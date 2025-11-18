@@ -10,10 +10,10 @@ from pydantic import BaseModel, Field
 from tgbot import send_message
 
 logging.basicConfig(
-    level=logging.INFO,  # <- this is the key bit
-    format="[{asctime}] {levelname}:{name}: {message}",
+    level=logging.INFO,
+    format="{levelname}:{name}:{filename}:{lineno}: {message}",
     style="{",
-    force=True,  # <- useful if something configured logging before
+    force=True,
 )
 
 TRADING212_KEY = os.environ["TRADING212_KEY"]
@@ -183,7 +183,7 @@ def place_limit_order(order: LimitOrder) -> Order:
         "timeValidity": "DAY",
     }
 
-    print(payload)
+    logging.info(payload)
 
     send_message(f"Placing limit order: {payload}")
 
@@ -192,7 +192,7 @@ def place_limit_order(order: LimitOrder) -> Order:
     response.raise_for_status()
 
     data = response.json()
-    print(data)
+    logging.info(data)
     return Order(**data)
 
 
@@ -208,7 +208,7 @@ def place_market_order(order: MarketOrder) -> Order:
         "ticker": order.ticker.value,
     }
 
-    print(payload)
+    logging.info(payload)
 
     message = f"Placing market order: {payload}"
     logging.info(f"Sending message: {message}")

@@ -17,6 +17,9 @@ from t212 import (
     cancel_order_by_id,
     fetch_account_cash,
     cancel_open_orders,
+    place_market_order,
+    MarketOrder,
+    MarketOrderType,
 )
 from utils import are_positions_tradeable
 import time
@@ -26,10 +29,10 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 
 logging.basicConfig(
-    level=logging.INFO,  # <- this is the key bit
-    format="[{asctime}] {levelname}:{name}: {message}",
+    level=logging.INFO,
+    format="{levelname}:{name}:{filename}:{lineno}: {message}",
     style="{",
-    force=True,  # <- useful if something configured logging before
+    force=True,
 )
 
 load_dotenv()
@@ -73,7 +76,7 @@ def wait_for_order_or_cancel(id: int, max_wait_seconds: int) -> bool:
         return True
     start = time.time()
     while not order_filled:
-        print("Order is still open")
+        logging.info("Order is still open")
         order_filled = has_order_been_filled(id)
         if order_filled:
             return True
@@ -83,6 +86,17 @@ def wait_for_order_or_cancel(id: int, max_wait_seconds: int) -> bool:
             assert success
             return False
     return False
+
+
+def get_current_positions() -> tuple[Position, Position]:
+    # Fetch positions if exchanges are open
+    ticker_values: list[str] = [i.value for i in Trading212Ticker.__members__.values()]
+    positions: dict[Trading212Ticker, Position] = {
+        p.ticker: p for p in fetch_positions() if p.ticker in ticker_values
+    }
+    base_position: Position = positions[Trading212Ticker.SP500_ACC.value]
+    lev_position: Position = positions[Trading212Ticker.SP500_5L.value]
+    return base_position, lev_position
 
 
 if __name__ == "__main__":
@@ -103,21 +117,22 @@ if __name__ == "__main__":
     while True:
         start = time.time()
         logging.info(f"{trader_state}")
-
-        # Fetch positions if exchanges are open
-        ticker_values: list[str] = [
-            i.value for i in Trading212Ticker.__members__.values()
-        ]
-        positions: dict[Trading212Ticker, Position] = {
-            p.ticker: p for p in fetch_positions() if p.ticker in ticker_values
-        }
-        base_position: Position = positions[Trading212Ticker.SP500_ACC.value]
-        lev_position: Position = positions[Trading212Ticker.SP500_5L.value]
+        #
+        # # Fetch positions if exchanges are open
+        # ticker_values: list[str] = [
+        #     i.value for i in Trading212Ticker.__members__.values()
+        # ]
+        # positions: dict[Trading212Ticker, Position] = {
+        #     p.ticker: p for p in fetch_positions() if p.ticker in ticker_values
+        # }
+        # base_position: Position = positions[Trading212Ticker.SP500_ACC.value]
+        # lev_position: Position = positions[Trading212Ticker.SP500_5L.value]
+        base_position, lev_position = get_current_positions()
         all_open: bool = are_positions_tradeable(
-            exchanges, instruments, list(positions.values())
+            exchanges, instruments, [base_position, lev_position]
         )
         if not all_open:
-            print("Not all open")
+            logging.info("Not all open")
             time.sleep(300)
             continue
         curdatetime = datetime.now()
@@ -126,13 +141,14 @@ if __name__ == "__main__":
             case State.INITIALIZING:
                 cancel_open_orders()
                 # Sell holdings in base
-                if base_position.quantity > 0.1:
-                    order: Order = place_limit_order(
-                        LimitOrder(
+                time.sleep(10)
+                base_position, lev_position = get_current_positions()
+                if base_position.quantity > 0.15:
+                    order: Order = place_market_order(
+                        MarketOrder(
                             ticker=Trading212Ticker.SP500_ACC,
                             quantity=base_position.quantity - 0.1,
-                            limit_price=base_position.currentPrice * 0.9997,  # TODO
-                            type=LimitOrderType.SELL,
+                            type=MarketOrderType.SELL,
                         )
                     )
                 signal_data.time_last_base_change = curdatetime
@@ -172,7 +188,7 @@ if __name__ == "__main__":
                                     ticker=Trading212Ticker.SP500_ACC,
                                     quantity=quantity * 0.7,  # TODO
                                     limit_price=base_position.currentPrice
-                                    * 1.0001,  # TODO
+                                    * 1.0002,  # TODO
                                     type=LimitOrderType.BUY,
                                 )
                             )
