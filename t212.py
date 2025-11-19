@@ -177,7 +177,7 @@ def place_limit_order(order: LimitOrder) -> Order:
     payload = {
         "quantity": round(order.quantity, 2)
         if order.type == LimitOrderType.BUY
-        else -order.quantity,  # 0.01
+        else round(-order.quantity,2),  # 0.01
         "limitPrice": round(order.limit_price, 3),  # 2960
         "ticker": order.ticker.value,
         "timeValidity": "DAY",
@@ -204,7 +204,7 @@ def place_market_order(order: MarketOrder) -> Order:
         "extendedHours": False,
         "quantity": round(order.quantity, 2)
         if order.type == MarketOrderType.BUY
-        else -order.quantity,  # 0.01
+        else round(-order.quantity,2),  # 0.01
         "ticker": order.ticker.value,
     }
 
