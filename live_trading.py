@@ -200,7 +200,7 @@ if __name__ == "__main__":
                                 MarketOrder(
                                     ticker=Trading212Ticker.SP500_ACC,
                                     quantity=quantity * 0.7,  # TODO
-                                    type=LimitOrderType.BUY,
+                                    type=MarketOrderType.BUY,
                                 )
                             )
                             ID = order.id
