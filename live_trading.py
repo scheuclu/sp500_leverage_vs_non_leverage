@@ -183,12 +183,19 @@ if __name__ == "__main__":
                             f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
                         )
                         try:
-                            order: Order = place_limit_order(
-                                LimitOrder(
+                            # order: Order = place_limit_order(
+                            #     LimitOrder(
+                            #         ticker=Trading212Ticker.SP500_ACC,
+                            #         quantity=quantity * 0.7,  # TODO
+                            #         limit_price=base_position.currentPrice
+                            #         * 1.0002,  # TODO
+                            #         type=LimitOrderType.BUY,
+                            #     )
+                            # )
+                            order: Order = place_market_order(
+                                MarketOrder(
                                     ticker=Trading212Ticker.SP500_ACC,
                                     quantity=quantity * 0.7,  # TODO
-                                    limit_price=base_position.currentPrice
-                                    * 1.0002,  # TODO
                                     type=LimitOrderType.BUY,
                                 )
                             )
@@ -198,7 +205,7 @@ if __name__ == "__main__":
                             )
                             if not filled:
                                 trader_state = trader_state.ORDER_FAILED
-                                send_message("Buy order failed")
+                                send_message("Buy order was not filled")
                             else:
                                 trader_state = State.INVESTED_IN_NON_LEVERAGE  # TODO
                                 send_message("Buy order succeeded")
@@ -215,13 +222,21 @@ if __name__ == "__main__":
                     send_message("Placing sell order")
                     time.sleep(2)  # because we may just have made a buy order
                     try:
-                        order: Order = place_limit_order(
-                            LimitOrder(
+                        # order: Order = place_limit_order(
+                        #     LimitOrder(
+                        #         ticker=Trading212Ticker.SP500_ACC,
+                        #         quantity=base_position.quantity
+                        #         - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
+                        #         limit_price=base_position.currentPrice * 0.9995,  # TODO
+                        #         type=LimitOrderType.SELL,
+                        #     )
+                        # )
+                        order: Order = place_market_order(
+                            MarketOrder(
                                 ticker=Trading212Ticker.SP500_ACC,
                                 quantity=base_position.quantity
                                 - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                                limit_price=base_position.currentPrice * 0.9995,  # TODO
-                                type=LimitOrderType.SELL,
+                                type=MarketOrderType.SELL,
                             )
                         )
                         ID = order.id
