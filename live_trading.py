@@ -4,6 +4,7 @@ from more_itertools.recipes import quantify
 
 from models import TradableInstrument, Position, Exchange, Order, Cash
 from dotenv import load_dotenv
+from sb import write_positions, APIResponse
 
 from t212 import (
     fetch_instruments,
@@ -128,6 +129,9 @@ if __name__ == "__main__":
         # base_position: Position = positions[Trading212Ticker.SP500_ACC.value]
         # lev_position: Position = positions[Trading212Ticker.SP500_5L.value]
         base_position, lev_position = get_current_positions()
+
+        response: APIResponse = write_positions([base_position, lev_position])
+
         all_open: bool = are_positions_tradeable(
             exchanges, instruments, [base_position, lev_position]
         )
