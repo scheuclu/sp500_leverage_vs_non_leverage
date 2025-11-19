@@ -32,7 +32,7 @@ instruments: list[TradableInstrument] = fetch_instruments()
 exchanges: list[Exchange] = fetch_exchanges()
 
 
-INTERVAL = 30  # seconds
+INTERVAL = 20  # seconds
 
 next_run = time.time()
 

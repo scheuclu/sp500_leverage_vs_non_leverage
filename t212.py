@@ -41,6 +41,9 @@ class Trading212Ticker(Enum):
 
     SP500_ACC = "VUAGl_EQ"
     SP500_5L = "5LUSl_EQ"
+    SP500_EUR = "VUAAm_EQ"
+    SP500_EUR_ISHARES= "SXR8d_EQ"
+    SP500_EUR_L= "US5Ld_EQ"
 
 
 def cancel_order_by_id(id: int) -> bool:
