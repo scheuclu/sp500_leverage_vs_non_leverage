@@ -45,8 +45,8 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 LEV_DIFF_INVEST = 0.004
 TIME_DIFF_INVEST = timedelta(minutes=2)
 
-BASE_TICKER=Trading212Ticker.SP500_EUR.value
-LEV_TICKER=Trading212Ticker.SP500_EUR_L.value
+BASE_TICKER=Trading212Ticker.SP500_EUR
+LEV_TICKER=Trading212Ticker.SP500_EUR_L
 
 # LEV_DIFF_INVEST = 0.0001
 # TIME_DIFF_INVEST = timedelta(minutes=1)
