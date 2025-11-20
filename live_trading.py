@@ -43,7 +43,10 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 
 LEV_DIFF_INVEST = 0.004
-TIME_DIFF_INVEST = timedelta(minutes=5)
+TIME_DIFF_INVEST = timedelta(minutes=2)
+
+BASE_TICKER=Trading212Ticker.SP500_EUR.value
+LEV_TICKER=Trading212Ticker.SP500_EUR_L.value
 
 # LEV_DIFF_INVEST = 0.0001
 # TIME_DIFF_INVEST = timedelta(minutes=1)
@@ -95,8 +98,8 @@ def get_current_positions() -> tuple[Position, Position]:
     positions: dict[Trading212Ticker, Position] = {
         p.ticker: p for p in fetch_positions() if p.ticker in ticker_values
     }
-    base_position: Position = positions[Trading212Ticker.SP500_ACC.value]
-    lev_position: Position = positions[Trading212Ticker.SP500_5L.value]
+    base_position: Position = positions[BASE_TICKER.value]
+    lev_position: Position = positions[LEV_TICKER.value]
     return base_position, lev_position
 
 
@@ -150,7 +153,7 @@ if __name__ == "__main__":
                 if base_position.quantity > 0.15:
                     order: Order = place_market_order(
                         MarketOrder(
-                            ticker=Trading212Ticker.SP500_ACC,
+                            ticker=BASE_TICKER,
                             quantity=base_position.quantity - 0.1,
                             type=MarketOrderType.SELL,
                         )
@@ -189,7 +192,7 @@ if __name__ == "__main__":
                         try:
                             # order: Order = place_limit_order(
                             #     LimitOrder(
-                            #         ticker=Trading212Ticker.SP500_ACC,
+                            #         ticker=BASE_TICKER,
                             #         quantity=quantity * 0.7,  # TODO
                             #         limit_price=base_position.currentPrice
                             #         * 1.0002,  # TODO
@@ -198,7 +201,7 @@ if __name__ == "__main__":
                             # )
                             order: Order = place_market_order(
                                 MarketOrder(
-                                    ticker=Trading212Ticker.SP500_ACC,
+                                    ticker=BASE_TICKER,
                                     quantity=quantity * 0.7,  # TODO
                                     type=MarketOrderType.BUY,
                                 )
@@ -228,7 +231,7 @@ if __name__ == "__main__":
                     try:
                         # order: Order = place_limit_order(
                         #     LimitOrder(
-                        #         ticker=Trading212Ticker.SP500_ACC,
+                        #         ticker=BASE_TICKER,
                         #         quantity=base_position.quantity
                         #         - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
                         #         limit_price=base_position.currentPrice * 0.9995,  # TODO
@@ -237,7 +240,7 @@ if __name__ == "__main__":
                         # )
                         order: Order = place_market_order(
                             MarketOrder(
-                                ticker=Trading212Ticker.SP500_ACC,
+                                ticker=BASE_TICKER,
                                 quantity=base_position.quantity
                                 - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
                                 type=MarketOrderType.SELL,

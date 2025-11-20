@@ -14,7 +14,7 @@ from supabase import Client, create_client
 from datetime import datetime, timedelta, date
 from pydantic import BaseModel
 from plotly.subplots import make_subplots
-
+from t212 import Trading212Ticker
 load_dotenv()
 
 import streamlit as st
@@ -30,6 +30,10 @@ headers = {
     "Content-Type": "application/json",
 }
 
+
+BASE_TICKER=Trading212Ticker.SP500_EUR.value
+LEV_TICKER=Trading212Ticker.SP500_EUR_L.value
+
 # url = "https://demo.trading212.com/api/v0/equity/portfolio"
 # response = requests.get(url, headers=headers)
 # positions = [Position(**i) for i in response.json()]
@@ -42,7 +46,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 FX = 0.9999
 MIN_MOVE = 8
 
-MIN_SECONDS = 200
+MIN_SECONDS = 100
 
 ###
 all_data = []
@@ -89,10 +93,10 @@ for row in all_data:
         Position.model_validate_json(p).ticker: Position.model_validate_json(p)
         for p in row["positions"]
     }
-    if "VUAGl_EQ" in positions and "5LUSl_EQ" in positions:
+    if BASE_TICKER in positions and LEV_TICKER in positions:
         data[d].times.append(t)
-        data[d].leveraged_prices.append(positions["5LUSl_EQ"].currentPrice)
-        data[d].non_leveraged_prices.append(positions["VUAGl_EQ"].currentPrice)
+        data[d].leveraged_prices.append(positions[LEV_TICKER].currentPrice)
+        data[d].non_leveraged_prices.append(positions[BASE_TICKER].currentPrice)
 
 
 # Compute buy and sell signals
@@ -115,17 +119,17 @@ class State(Enum):
 
 trader_state = State.READY_TO_INVEST
 for d, datedata in data.items():
-    current_base_value = datedata.non_leveraged_prices[0]
-    lev_at_current_base_value = datedata.leveraged_prices[0]
-    current_base_value_since = datedata.times[0]
+    current_base_value = datedata.non_leveraged_prices[0] if len(datedata.non_leveraged_prices)>0 else []
+    lev_at_current_base_value = datedata.leveraged_prices[0] if len(datedata.leveraged_prices)>0 else []
+    current_base_value_since = datedata.times[0] if len(datedata.times)>0 else []
     for base, lev, dt in zip(
         datedata.non_leveraged_prices, datedata.leveraged_prices, datedata.times
     ):
         if base == current_base_value:
-            lev_move = lev - lev_at_current_base_value
+            lev_move_rel = (lev - lev_at_current_base_value)/lev_at_current_base_value
             if (
                 trader_state == State.READY_TO_INVEST
-                and lev_move > MIN_MOVE
+                and lev_move_rel > 0.004
                 and (dt - current_base_value_since).seconds > MIN_SECONDS
             ):
                 datedata.buy_signal_times.append(dt)
@@ -147,8 +151,8 @@ for d, datedata in data.items():
             current_base_value = base
             current_base_value_since = dt
             lev_at_current_base_value = lev
-            lev_move = 0
-        datedata.lev_moves.append(lev_move)
+            lev_move_rel = 0
+        datedata.lev_moves.append(lev_move_rel)
 
 st.text(
     str(
