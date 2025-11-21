@@ -133,8 +133,6 @@ if __name__ == "__main__":
         # lev_position: Position = positions[Trading212Ticker.SP500_5L.value]
         base_position, lev_position = get_current_positions()
 
-        response: APIResponse = write_positions([base_position, lev_position])
-
         all_open: bool = are_positions_tradeable(
             exchanges, instruments, [base_position, lev_position]
         )
@@ -142,6 +140,7 @@ if __name__ == "__main__":
             logging.info("Not all open")
             time.sleep(300)
             continue
+        response: APIResponse = write_positions([base_position, lev_position])
         curdatetime = datetime.now()
 
         match trader_state:
