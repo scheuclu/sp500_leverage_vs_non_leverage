@@ -42,11 +42,11 @@ TRADING212_KEY = os.environ["TRADING212_KEY"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 
-LEV_DIFF_INVEST = 0.004
+LEV_DIFF_INVEST = 0.006
 TIME_DIFF_INVEST = timedelta(minutes=2)
 
-BASE_TICKER=Trading212Ticker.SP500_EUR
-LEV_TICKER=Trading212Ticker.SP500_EUR_L
+BASE_TICKER = Trading212Ticker.SP500_EUR
+LEV_TICKER = Trading212Ticker.SP500_EUR_L
 
 # LEV_DIFF_INVEST = 0.0001
 # TIME_DIFF_INVEST = timedelta(minutes=1)
@@ -121,16 +121,7 @@ if __name__ == "__main__":
     while True:
         start = time.time()
         logging.info(f"{trader_state}")
-        #
-        # # Fetch positions if exchanges are open
-        # ticker_values: list[str] = [
-        #     i.value for i in Trading212Ticker.__members__.values()
-        # ]
-        # positions: dict[Trading212Ticker, Position] = {
-        #     p.ticker: p for p in fetch_positions() if p.ticker in ticker_values
-        # }
-        # base_position: Position = positions[Trading212Ticker.SP500_ACC.value]
-        # lev_position: Position = positions[Trading212Ticker.SP500_5L.value]
+
         base_position, lev_position = get_current_positions()
 
         all_open: bool = are_positions_tradeable(
@@ -189,22 +180,22 @@ if __name__ == "__main__":
                             f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
                         )
                         try:
-                            # order: Order = place_limit_order(
-                            #     LimitOrder(
-                            #         ticker=BASE_TICKER,
-                            #         quantity=quantity * 0.7,  # TODO
-                            #         limit_price=base_position.currentPrice
-                            #         * 1.0002,  # TODO
-                            #         type=LimitOrderType.BUY,
-                            #     )
-                            # )
-                            order: Order = place_market_order(
-                                MarketOrder(
+                            order: Order = place_limit_order(
+                                LimitOrder(
                                     ticker=BASE_TICKER,
-                                    quantity=quantity * 0.7,  # TODO
-                                    type=MarketOrderType.BUY,
+                                    quantity=quantity * 0.9,  # TODO
+                                    limit_price=base_position.currentPrice
+                                    * (1 + LEV_DIFF_INVEST / 5),
+                                    type=LimitOrderType.BUY,
                                 )
                             )
+                            # order: Order = place_market_order(
+                            #     MarketOrder(
+                            #         ticker=BASE_TICKER,
+                            #         quantity=quantity * 0.7,  # TODO
+                            #         type=MarketOrderType.BUY,
+                            #     )
+                            # )
                             ID = order.id
                             filled = wait_for_order_or_cancel(
                                 id=order.id, max_wait_seconds=3 * 60
@@ -228,23 +219,24 @@ if __name__ == "__main__":
                     send_message("Placing sell order")
                     time.sleep(2)  # because we may just have made a buy order
                     try:
-                        # order: Order = place_limit_order(
-                        #     LimitOrder(
-                        #         ticker=BASE_TICKER,
-                        #         quantity=base_position.quantity
-                        #         - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                        #         limit_price=base_position.currentPrice * 0.9995,  # TODO
-                        #         type=LimitOrderType.SELL,
-                        #     )
-                        # )
-                        order: Order = place_market_order(
-                            MarketOrder(
+                        order: Order = place_limit_order(
+                            LimitOrder(
                                 ticker=BASE_TICKER,
                                 quantity=base_position.quantity
                                 - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                                type=MarketOrderType.SELL,
+                                limit_price=base_position.currentPrice
+                                * (1 - LEV_DIFF_INVEST / 5),  # TODO
+                                type=LimitOrderType.SELL,
                             )
                         )
+                        # order: Order = place_market_order(
+                        #     MarketOrder(
+                        #         ticker=BASE_TICKER,
+                        #         quantity=base_position.quantity
+                        #         - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
+                        #         type=MarketOrderType.SELL,
+                        #     )
+                        # )
                         ID = order.id
 
                         filled = wait_for_order_or_cancel(

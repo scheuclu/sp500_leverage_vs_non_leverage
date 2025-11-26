@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, date
 from pydantic import BaseModel
 from plotly.subplots import make_subplots
 from t212 import Trading212Ticker
+
 load_dotenv()
 
 import streamlit as st
@@ -31,8 +32,8 @@ headers = {
 }
 
 
-BASE_TICKER=Trading212Ticker.SP500_EUR.value
-LEV_TICKER=Trading212Ticker.SP500_EUR_L.value
+BASE_TICKER = Trading212Ticker.SP500_EUR.value
+LEV_TICKER = Trading212Ticker.SP500_EUR_L.value
 
 # url = "https://demo.trading212.com/api/v0/equity/portfolio"
 # response = requests.get(url, headers=headers)
@@ -119,14 +120,20 @@ class State(Enum):
 
 trader_state = State.READY_TO_INVEST
 for d, datedata in data.items():
-    current_base_value = datedata.non_leveraged_prices[0] if len(datedata.non_leveraged_prices)>0 else []
-    lev_at_current_base_value = datedata.leveraged_prices[0] if len(datedata.leveraged_prices)>0 else []
-    current_base_value_since = datedata.times[0] if len(datedata.times)>0 else []
+    current_base_value = (
+        datedata.non_leveraged_prices[0]
+        if len(datedata.non_leveraged_prices) > 0
+        else []
+    )
+    lev_at_current_base_value = (
+        datedata.leveraged_prices[0] if len(datedata.leveraged_prices) > 0 else []
+    )
+    current_base_value_since = datedata.times[0] if len(datedata.times) > 0 else []
     for base, lev, dt in zip(
         datedata.non_leveraged_prices, datedata.leveraged_prices, datedata.times
     ):
         if base == current_base_value:
-            lev_move_rel = (lev - lev_at_current_base_value)/lev_at_current_base_value
+            lev_move_rel = (lev - lev_at_current_base_value) / lev_at_current_base_value
             if (
                 trader_state == State.READY_TO_INVEST
                 and lev_move_rel > 0.004
