@@ -185,7 +185,7 @@ if __name__ == "__main__":
                                     ticker=BASE_TICKER,
                                     quantity=quantity * 0.9,  # TODO
                                     limit_price=base_position.currentPrice
-                                    * (1 + LEV_DIFF_INVEST / 5),
+                                    * (1 + LEV_DIFF_INVEST / 7),
                                     type=LimitOrderType.BUY,
                                 )
                             )
@@ -225,7 +225,7 @@ if __name__ == "__main__":
                                 quantity=base_position.quantity
                                 - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
                                 limit_price=base_position.currentPrice
-                                * (1 - LEV_DIFF_INVEST / 5),  # TODO
+                                * (1 - LEV_DIFF_INVEST / 7),  # TODO
                                 type=LimitOrderType.SELL,
                             )
                         )
