@@ -51,6 +51,8 @@ LEV_TICKER = Trading212Ticker.SP500_EUR_L
 # LEV_DIFF_INVEST = 0.0001
 # TIME_DIFF_INVEST = timedelta(minutes=1)
 
+buy_order: Order = Order()
+
 
 class State(Enum):
     INVESTED_IN_LEVERAGE = 0
@@ -180,12 +182,12 @@ if __name__ == "__main__":
                             f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
                         )
                         try:
-                            order: Order = place_limit_order(
+                            buy_order = place_limit_order(
                                 LimitOrder(
                                     ticker=BASE_TICKER,
                                     quantity=quantity * 0.9,  # TODO
                                     limit_price=base_position.currentPrice
-                                    * (1 + LEV_DIFF_INVEST / 7),
+                                    * (1 + LEV_DIFF_INVEST / 8),
                                     type=LimitOrderType.BUY,
                                 )
                             )
@@ -196,9 +198,9 @@ if __name__ == "__main__":
                             #         type=MarketOrderType.BUY,
                             #     )
                             # )
-                            ID = order.id
+                            ID = buy_order.id
                             filled = wait_for_order_or_cancel(
-                                id=order.id, max_wait_seconds=3 * 60
+                                id=buy_order.id, max_wait_seconds=3 * 60
                             )
                             if not filled:
                                 trader_state = trader_state.ORDER_FAILED
@@ -225,7 +227,8 @@ if __name__ == "__main__":
                                 quantity=base_position.quantity
                                 - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
                                 limit_price=base_position.currentPrice
-                                * (1 - LEV_DIFF_INVEST / 7),  # TODO
+                                * (1 - LEV_DIFF_INVEST / 8),  # TODO
+                                # limit_price=buy_order.limitPrice,
                                 type=LimitOrderType.SELL,
                             )
                         )
