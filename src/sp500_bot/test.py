@@ -1,17 +1,19 @@
 import os
+from datetime import datetime, timedelta
+from enum import Enum
+
+import numpy as np
 import plotly.graph_objects as go
-import requests
-from sp500_bot.models import TradableInstrument, Exchange, WorkingSchedule, Position
+import plotly.io as pio
+import streamlit as st
 from dotenv import load_dotenv
 from plotly.subplots import make_subplots
-import plotly.io as pio
+from supabase import Client, create_client
 
-pio.renderers.default = "browser"
-import numpy as np
+from sp500_bot.models import Position
 
 load_dotenv()
-
-import streamlit as st
+pio.renderers.default = "browser"
 
 st.title("Strategy visualization")
 
@@ -22,13 +24,6 @@ headers = {
     "Authorization": TRADING212_KEY,
     "Content-Type": "application/json",
 }
-
-# url = "https://demo.trading212.com/api/v0/equity/portfolio"
-# response = requests.get(url, headers=headers)
-# positions = [Position(**i) for i in response.json()]
-
-from supabase import Client, create_client
-from datetime import datetime, timedelta
 
 date_str = "2025-10-28T08:47:00.425164+00:00"
 dt = datetime.fromisoformat(date_str)
@@ -96,7 +91,6 @@ NUM_SHARES_LEVERAGE = 0
 
 FX = 0.9999
 FX = 1.0
-from enum import Enum
 
 
 class State(Enum):
@@ -193,7 +187,6 @@ for base, lev, dt in zip(non_leverage, leverage, dts):
         lev_move = 0
     lev_moves.append(lev_move)
 
-from plotly.subplots import make_subplots
 
 fig = make_subplots(specs=[[{"secondary_y": True}]])
 times_selected = [t for t in times if datetime.fromisoformat(t).date() == selected_date]

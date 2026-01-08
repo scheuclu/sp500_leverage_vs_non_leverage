@@ -1,24 +1,21 @@
+import math
 import os
+from datetime import date, datetime
+from enum import Enum
+
 import plotly.graph_objects as go
-import requests
-from sp500_bot.models import TradableInstrument, Exchange, WorkingSchedule, Position
+import plotly.io as pio
+import streamlit as st
 from dotenv import load_dotenv
 from plotly.subplots import make_subplots
-import plotly.io as pio
-import math
-
-pio.renderers.default = "browser"
-import numpy as np
-import pandas as pd
-from supabase import Client, create_client
-from datetime import datetime, timedelta, date
 from pydantic import BaseModel
-from plotly.subplots import make_subplots
+from supabase import Client, create_client
+
+from sp500_bot.models import Position
 from sp500_bot.t212 import Trading212Ticker
 
 load_dotenv()
-
-import streamlit as st
+pio.renderers.default = "browser"
 
 st.set_page_config(layout="wide")
 st.title("Strategy visualization")
@@ -101,7 +98,6 @@ for row in all_data:
 
 
 # Compute buy and sell signals
-from enum import Enum
 
 
 class State(Enum):

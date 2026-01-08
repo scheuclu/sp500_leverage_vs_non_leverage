@@ -1,10 +1,15 @@
 import os
+
+import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import requests
-from sp500_bot.models import TradableInstrument, Exchange, WorkingSchedule, Position
+import streamlit as st
 from dotenv import load_dotenv
 from plotly.subplots import make_subplots
-import numpy as np
+from supabase import Client, create_client
+
+from sp500_bot.models import Position
 
 load_dotenv()
 
@@ -19,8 +24,6 @@ headers = {
 url = "https://demo.trading212.com/api/v0/equity/portfolio"
 response = requests.get(url, headers=headers)
 positions = [Position(**i) for i in response.json()]
-
-from supabase import Client, create_client
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -72,8 +75,6 @@ for shift in [1, 2, 3, 4]:
     corr = np.corrcoef(diff_leverage[shift:], diff_non_leverage[:-shift])[0, 1]
     print(shift, corr)
 
-import pandas as pd
-
 window = 3  # e.g., 3-day rolling correlation
 rolling_corr = pd.Series(leverage).rolling(window).corr(pd.Series(non_leverage))
 
@@ -93,8 +94,6 @@ fig.add_trace(
     trace_leverage,
     secondary_y=True,
 )
-
-import streamlit as st
 
 st.set_page_config(layout="wide")
 

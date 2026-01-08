@@ -8,7 +8,6 @@ from sp500_bot.models import (
 )
 from dotenv import load_dotenv
 
-from postgrest import APIResponse
 
 from sp500_bot.t212 import fetch_instruments, fetch_exchanges, fetch_positions, Trading212Ticker
 from sp500_bot.sb import write_positions
@@ -36,8 +35,6 @@ def main():
     next_run = time.time()
 
     while True:
-        start = time.time()
-
         ticker_values: list[str] = [i.value for i in Trading212Ticker.__members__.values()]
         positions: list[Position] = [
             p for p in fetch_positions() if p.ticker in ticker_values
@@ -50,7 +47,7 @@ def main():
             time.sleep(300)
             continue
 
-        response: APIResponse = write_positions(positions)
+        write_positions(positions)
 
         # Schedule the next run based on absolute time
         next_run += INTERVAL
