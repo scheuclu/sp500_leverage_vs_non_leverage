@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from sp500_bot.models import Position, Order, Cash
-from sp500_bot.sb import write_positions
+from sp500_bot.sb import write_positions, write_state
 from sp500_bot.t212 import (
     fetch_instruments,
     Trading212Ticker,
@@ -302,6 +302,14 @@ def main():
         curdatetime = datetime.now()
 
         trader_state = trader_state.process(base_position, lev_position, curdatetime)
+
+        # Write current state to Supabase
+        write_state(
+            state_name=trader_state.__class__.__name__,
+            time_last_base_change=trader_state.signal_data.time_last_base_change,
+            base_value_at_last_change=trader_state.signal_data.base_value_at_last_change,
+            lev_value_at_last_change=trader_state.signal_data.lev_value_at_last_change,
+        )
 
         # Schedule the next run based on absolute time
         next_run += INTERVAL
