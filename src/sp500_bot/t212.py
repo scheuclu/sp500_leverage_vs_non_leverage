@@ -1,4 +1,5 @@
 import logging
+import sys
 
 import requests
 from sp500_bot.models import Order, Position, Cash, TradableInstrument, Exchange
@@ -10,7 +11,7 @@ from pydantic import BaseModel, Field
 from sp500_bot.tgbot import send_message
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="{levelname}:{name}:{filename}:{lineno}: {message}",
     style="{",
     force=True,
@@ -24,13 +25,6 @@ headers = {
     "Authorization": TRADING212_KEY,
     "Content-Type": "application/json",
 }
-
-
-class ToolError(BaseModel):
-    """Whenever this is returned, it means something went wront when calling a tool and we are capturing the problem here."""
-
-    error_type: str = Field(description="Type of the error that has occured.")
-    message: str = Field(description="A message describing what exactly the issue is.")
 
 
 from enum import Enum
@@ -48,80 +42,73 @@ class Trading212Ticker(Enum):
 
 def cancel_order_by_id(id: int) -> bool:
     url = "https://demo.trading212.com/api/v0/equity/orders/" + str(id)
-
+    logging.debug(f"Calling cancel_order_by_id({id})")
     response = requests.delete(url, headers=headers)
     response.raise_for_status()
     return response.status_code == 200
 
 
-def fetch_open_orders() -> list[Order] | ToolError:
-    try:
-        url = "https://demo.trading212.com/api/v0/equity/orders"
+def fetch_open_orders() -> list[Order]:
+    url = "https://demo.trading212.com/api/v0/equity/orders"
+    logging.debug("Calling fetch_open_orders()")
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
 
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+    data = response.json()
+    return [Order(**d) for d in data]
 
-        data = response.json()
-        return [Order(**d) for d in data]
-    except Exception as e:
-        return ToolError(message=str(e), error_type="RequestError")
 
 
 def cancel_open_orders():
-    open_orders: list[Order] | ToolError = fetch_open_orders()
-    assert isinstance(open_orders, list)
+    open_orders = fetch_open_orders()
     for order in open_orders:
         if order.id:
             assert cancel_order_by_id(order.id)
 
 
-def place_buy_order(ticker: Trading212Ticker, quantity: float) -> Order | ToolError:
+def place_buy_order(ticker: Trading212Ticker, quantity: float) -> Order:
     """Buying asset with specific ticker on Trading212"""
+    url = "https://demo.trading212.com/api/v0/equity/orders/market"
 
-    try:
-        url = "https://demo.trading212.com/api/v0/equity/orders/market"
+    payload = {
+        "quantity": quantity,
+        "ticker": ticker.value,  # "AAPL_US_EQ"
+    }
+    logging.debug(f"Calling place_buy_order({ticker}, {quantity})")
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
 
-        payload = {
-            "quantity": quantity,
-            "ticker": ticker.value,  # "AAPL_US_EQ"
-        }
-
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-
-        data = response.json()
-        return Order(**data)
-    except Exception as e:
-        return ToolError(message=str(e), error_type="RequestError")
+    data = response.json()
+    return Order(**data)
 
 
 def place_sell_order(
     ticker: Trading212Ticker, quantity: float, stop_price: float
-) -> Order | ToolError:
+) -> Order:
     """Selling an asset with specific ticker on Trading212.
 
     The `quantity` needs to be negative.
     """
-    try:
-        url = "https://demo.trading212.com/api/v0/equity/orders/stop"
+    url = "https://demo.trading212.com/api/v0/equity/orders/stop"
 
-        payload = {
-            "quantity": quantity,  # 0.01
-            "stopPrice": stop_price,  # 2960
-            "ticker": ticker.value,
-            "timeValidity": "DAY",
-        }
+    payload = {
+        "quantity": quantity,  # 0.01
+        "stopPrice": stop_price,  # 2960
+        "ticker": ticker.value,
+        "timeValidity": "DAY",
+    }
+    logging.debug(f"Calling place_sell_order({ticker}, {quantity}, {stop_price})")
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
 
-        response = requests.post(url, json=payload, headers=headers)
-
-        data = response.json()
-        return Order(**data)
-    except Exception as e:
-        return ToolError(message=str(e), error_type="RequestError")
+    data = response.json()
+    return Order(**data)
 
 
 def fetch_positions() -> list[Position]:
+    logging.debug("Calling fetch_positions()")
     url = "https://demo.trading212.com/api/v0/equity/portfolio"
+    sys.stdout.flush()
 
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -133,7 +120,7 @@ def fetch_single_holding(ticker: Trading212Ticker) -> Position | None:
     url = "https://demo.trading212.com/api/v0/equity/portfolio/ticker"
 
     payload = {"ticker": ticker.value}
-
+    logging.debug(f"Calling fetch_single_holding({ticker})")
     response = requests.post(url, json=payload, headers=headers)
     if response.status_code == 404:
         return None
@@ -143,7 +130,7 @@ def fetch_single_holding(ticker: Trading212Ticker) -> Position | None:
 
 def fetch_account_cash() -> Cash:
     url = "https://demo.trading212.com/api/v0/equity/account/cash"
-
+    logging.debug("Calling fetch_account_cash()")
     response = requests.get(url, headers=headers)
     response.raise_for_status()
 
@@ -186,6 +173,7 @@ def place_limit_order(order: LimitOrder) -> Order:
         "timeValidity": "DAY",
     }
 
+    logging.debug(f"Calling place_limit_order({order})")
     logging.info(payload)
 
     send_message(f"Placing limit order: {payload}")
@@ -211,6 +199,7 @@ def place_market_order(order: MarketOrder) -> Order:
         "ticker": order.ticker.value,
     }
 
+    logging.debug(f"Calling place_market_order({order})")
     logging.info(payload)
 
     message = f"Placing market order: {payload}"
@@ -225,28 +214,26 @@ def place_market_order(order: MarketOrder) -> Order:
     return Order(**data)
 
 
-def fetch_open_order(id: int) -> Order | ToolError:
-    try:
-        url = f"https://demo.trading212.com/api/v0/equity/orders/{id}"
+def fetch_open_order(id: int) -> Order:
+    url = f"https://demo.trading212.com/api/v0/equity/orders/{id}"
+    logging.debug(f"Calling fetch_open_order({id})")
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
 
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-
-        data = response.json()
-        return Order(**data)
-    except Exception as e:
-        return ToolError(message=str(e), error_type="RequestError")
+    data = response.json()
+    return Order(**data)
 
 
 def has_order_been_filled(id: int):
     url = f"https://demo.trading212.com/api/v0/equity/orders/{id}"
-
+    logging.debug(f"Calling has_order_been_filled({id})")
     response = requests.get(url, headers=headers)
     return response.status_code == 404
 
 
 def fetch_instruments() -> list[TradableInstrument]:
     url = "https://demo.trading212.com/api/v0/equity/metadata/instruments"
+    logging.debug("Calling fetch_instruments()")
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     instruments = {d["ticker"]: TradableInstrument(**d) for d in response.json()}
@@ -255,6 +242,7 @@ def fetch_instruments() -> list[TradableInstrument]:
 
 def fetch_exchanges() -> list[Exchange]:
     url = "https://demo.trading212.com/api/v0/equity/metadata/exchanges"
+    logging.debug("Calling fetch_exchanges()")
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     exchanges = [Exchange(**d) for d in response.json()]
@@ -262,7 +250,7 @@ def fetch_exchanges() -> list[Exchange]:
 
 
 if __name__ == "__main__":
-    order: Order | ToolError = place_market_order(
+    order: Order = place_market_order(
         MarketOrder(
             ticker=Trading212Ticker.SP500_ACC, quantity=20.0, type=MarketOrderType.BUY
         )
