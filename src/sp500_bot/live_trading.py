@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import os
 import logging
-from more_itertools.recipes import quantify
+import time
+from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
+
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 from sp500_bot.models import TradableInstrument, Position, Exchange, Order, Cash
-from dotenv import load_dotenv
 from sp500_bot.sb import write_positions, APIResponse
-
 from sp500_bot.t212 import (
     fetch_instruments,
     Trading212Ticker,
@@ -23,11 +28,7 @@ from sp500_bot.t212 import (
     MarketOrderType,
 )
 from sp500_bot.utils import are_positions_tradeable
-import time
 from sp500_bot.tgbot import send_message
-from enum import Enum
-from datetime import datetime, timedelta
-from pydantic import BaseModel, Field
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,29 +52,165 @@ LEV_TICKER = Trading212Ticker.SP500_EUR_L
 # LEV_DIFF_INVEST = 0.0001
 # TIME_DIFF_INVEST = timedelta(minutes=1)
 
-buy_order: Order = Order()
-
-
-class State(Enum):
-    INVESTED_IN_LEVERAGE = 0
-    INVESTED_IN_NON_LEVERAGE = 1
-    READY_TO_INVEST = 2
-    INITIALIZING = 99
-    ORDER_FAILED = 404
-
-    def __init__(
-        self, code, num_shares_leverage=0, num_shares_non_leverage=0, cash=10000
-    ):
-        self.code = code
-        self.num_shares_leverage = num_shares_leverage
-        self.num_shares_non_leverage = num_shares_non_leverage
-        self.cash = cash
-
 
 class SignalData(BaseModel):
     time_last_base_change: datetime
-    base_value_at_last_change: float = Field(default=0.0, description="TODO")
-    lev_value_at_last_change: float = Field(default=0.0, description="TODO")
+    base_value_at_last_change: float = Field(default=0.0)
+    lev_value_at_last_change: float = Field(default=0.0)
+
+
+class TraderState(ABC):
+    def __init__(self, signal_data: SignalData):
+        self.signal_data = signal_data
+
+    @abstractmethod
+    def process(
+        self,
+        base_position: Position,
+        lev_position: Position,
+        curdatetime: datetime,
+    ) -> TraderState:
+        pass
+
+
+class Initializing(TraderState):
+    def process(
+        self,
+        base_position: Position,
+        lev_position: Position,
+        curdatetime: datetime,
+    ) -> ReadyToInvest:
+        cancel_open_orders()
+        # Sell holdings in base
+        time.sleep(10)
+        base_position, lev_position = get_current_positions()
+        if base_position.quantity > 0.15:
+            order: Order = place_market_order(
+                MarketOrder(
+                    ticker=BASE_TICKER,
+                    quantity=base_position.quantity - 0.1,
+                    type=MarketOrderType.SELL,
+                )
+            )
+        send_message("Initialized and ready to invest")
+        return ReadyToInvest(
+            signal_data=SignalData(
+                time_last_base_change=curdatetime,
+                base_value_at_last_change=base_position.currentPrice,
+                lev_value_at_last_change=lev_position.currentPrice,
+            )
+        )
+
+
+class ReadyToInvest(TraderState):
+    def process(
+        self,
+        base_position: Position,
+        lev_position: Position,
+        curdatetime: datetime,
+    ) -> ReadyToInvest | OrderFailed | InvestedInNonLeverage:
+        if base_position.currentPrice != self.signal_data.base_value_at_last_change:
+            # Base asset price change - update signal data and stay in same state
+            logging.info("Base price updated")
+            return ReadyToInvest(
+                signal_data=SignalData(
+                    time_last_base_change=curdatetime,
+                    base_value_at_last_change=base_position.currentPrice,
+                    lev_value_at_last_change=lev_position.currentPrice,
+                )
+            )
+
+        lev_diff_rel = (
+            lev_position.currentPrice - self.signal_data.lev_value_at_last_change
+        ) / self.signal_data.lev_value_at_last_change
+        logging.info(
+            f"{round(lev_diff_rel, 4)} | {curdatetime - self.signal_data.time_last_base_change}"
+        )
+
+        if (
+            lev_diff_rel > LEV_DIFF_INVEST
+            and curdatetime - self.signal_data.time_last_base_change > TIME_DIFF_INVEST
+        ):
+            # Make Investment
+            cash: Cash = fetch_account_cash()
+            quantity: float = cash.free / base_position.currentPrice
+            send_message(
+                f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
+            )
+            try:
+                buy_order = place_limit_order(
+                    LimitOrder(
+                        ticker=BASE_TICKER,
+                        quantity=quantity * 0.9,  # TODO
+                        limit_price=base_position.currentPrice * (1 + LEV_DIFF_INVEST / 8),
+                        type=LimitOrderType.BUY,
+                    )
+                )
+                filled = wait_for_order_or_cancel(id=buy_order.id, max_wait_seconds=3 * 60)
+                if not filled:
+                    send_message("Buy order was not filled")
+                    return OrderFailed(signal_data=self.signal_data)
+                else:
+                    send_message("Buy order succeeded")
+                    return InvestedInNonLeverage(signal_data=self.signal_data)
+            except Exception as e:
+                send_message(f"Error placing buy order: {str(e)}")
+                return OrderFailed(signal_data=self.signal_data)
+
+        # No action needed, stay in same state
+        return self
+
+
+class InvestedInNonLeverage(TraderState):
+    def process(
+        self,
+        base_position: Position,
+        lev_position: Position,
+        curdatetime: datetime,
+    ) -> InvestedInNonLeverage | Initializing | OrderFailed:
+        if base_position.currentPrice != self.signal_data.base_value_at_last_change:
+            # Base price changed - sell and go back to initializing
+            send_message("Placing sell order")
+            time.sleep(2)  # because we may just have made a buy order
+            try:
+                order: Order = place_limit_order(
+                    LimitOrder(
+                        ticker=BASE_TICKER,
+                        quantity=base_position.quantity - 0.1,  # Don't sell everything
+                        limit_price=base_position.currentPrice * (1 - LEV_DIFF_INVEST / 8),
+                        type=LimitOrderType.SELL,
+                    )
+                )
+                filled = wait_for_order_or_cancel(id=order.id, max_wait_seconds=3 * 60)
+                if not filled:
+                    send_message("Sell order failed")
+                    return OrderFailed(signal_data=self.signal_data)
+                else:
+                    send_message("Sell order succeeded")
+                    return Initializing(
+                        signal_data=SignalData(
+                            time_last_base_change=curdatetime,
+                            base_value_at_last_change=base_position.currentPrice,
+                            lev_value_at_last_change=lev_position.currentPrice,
+                        )
+                    )
+            except Exception as e:
+                send_message(f"Error placing order: {str(e)}")
+                return OrderFailed(signal_data=self.signal_data)
+
+        # No price change, stay in same state
+        return self
+
+
+class OrderFailed(TraderState):
+    def process(
+        self,
+        base_position: Position,
+        lev_position: Position,
+        curdatetime: datetime,
+    ) -> Initializing:
+        send_message("Landed in order failed. Will Re-initialize")
+        return Initializing(signal_data=self.signal_data)
 
 
 def wait_for_order_or_cancel(id: int, max_wait_seconds: int) -> bool:
@@ -110,19 +247,19 @@ def main():
     exchanges: list[Exchange] = fetch_exchanges()
 
     INTERVAL = 20  # seconds
-
     next_run = time.time()
 
-    trader_state = State.INITIALIZING
-    signal_data: SignalData = SignalData(
-        time_last_base_change=datetime.now(),
-        base_value_at_last_change=0.0,
-        lev_value_at_last_change=0.0,
+    trader_state: TraderState = Initializing(
+        signal_data=SignalData(
+            time_last_base_change=datetime.now(),
+            base_value_at_last_change=0.0,
+            lev_value_at_last_change=0.0,
+        )
     )
 
     while True:
         start = time.time()
-        logging.info(f"{trader_state}")
+        logging.info(f"{trader_state.__class__.__name__}")
 
         base_position, lev_position = get_current_positions()
 
@@ -133,133 +270,11 @@ def main():
             logging.info("Not all open")
             time.sleep(300)
             continue
+
         response: APIResponse = write_positions([base_position, lev_position])
         curdatetime = datetime.now()
 
-        match trader_state:
-            case State.INITIALIZING:
-                cancel_open_orders()
-                # Sell holdings in base
-                time.sleep(10)
-                base_position, lev_position = get_current_positions()
-                if base_position.quantity > 0.15:
-                    order: Order = place_market_order(
-                        MarketOrder(
-                            ticker=BASE_TICKER,
-                            quantity=base_position.quantity - 0.1,
-                            type=MarketOrderType.SELL,
-                        )
-                    )
-                signal_data.time_last_base_change = curdatetime
-                signal_data.base_value_at_last_change = base_position.currentPrice
-                signal_data.lev_value_at_last_change = lev_position.currentPrice
-                trader_state = State.READY_TO_INVEST
-                send_message("Initialized and ready to invest")
-            case State.READY_TO_INVEST:
-                if (
-                    base_position.currentPrice != signal_data.base_value_at_last_change
-                ):  # Base asset price change
-                    signal_data.time_last_base_change = curdatetime
-                    signal_data.base_value_at_last_change = base_position.currentPrice
-                    signal_data.lev_value_at_last_change = lev_position.currentPrice
-                    logging.info("Base price updated")
-                else:
-                    lev_diff_rel = (
-                        lev_position.currentPrice - signal_data.lev_value_at_last_change
-                    ) / signal_data.lev_value_at_last_change
-                    logging.info(
-                        f"{round(lev_diff_rel, 4)} | {curdatetime - signal_data.time_last_base_change}"
-                    )
-                    if (
-                        lev_diff_rel > LEV_DIFF_INVEST
-                        and curdatetime - signal_data.time_last_base_change
-                        > TIME_DIFF_INVEST
-                    ):
-                        # Make Investment
-                        cash: Cash = fetch_account_cash()
-                        quantity: float = cash.free / base_position.currentPrice
-                        send_message(
-                            f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
-                        )
-                        try:
-                            buy_order = place_limit_order(
-                                LimitOrder(
-                                    ticker=BASE_TICKER,
-                                    quantity=quantity * 0.9,  # TODO
-                                    limit_price=base_position.currentPrice
-                                    * (1 + LEV_DIFF_INVEST / 8),
-                                    type=LimitOrderType.BUY,
-                                )
-                            )
-                            # order: Order = place_market_order(
-                            #     MarketOrder(
-                            #         ticker=BASE_TICKER,
-                            #         quantity=quantity * 0.7,  # TODO
-                            #         type=MarketOrderType.BUY,
-                            #     )
-                            # )
-                            ID = buy_order.id
-                            filled = wait_for_order_or_cancel(
-                                id=buy_order.id, max_wait_seconds=3 * 60
-                            )
-                            if not filled:
-                                trader_state = trader_state.ORDER_FAILED
-                                send_message("Buy order was not filled")
-                            else:
-                                trader_state = State.INVESTED_IN_NON_LEVERAGE  # TODO
-                                send_message("Buy order succeeded")
-                        except Exception as e:
-                            send_message(f"Erro placing buy order: {str(e)}")
-                            trader_state = State.ORDER_FAILED
-
-            case State.INVESTED_IN_NON_LEVERAGE:
-                # TODO wait for base price to increase
-                if base_position.currentPrice != signal_data.base_value_at_last_change:
-                    signal_data.time_last_base_change = curdatetime
-                    signal_data.base_value_at_last_change = base_position.currentPrice
-                    signal_data.lev_value_at_last_change = lev_position.currentPrice
-                    send_message("Placing sell order")
-                    time.sleep(2)  # because we may just have made a buy order
-                    try:
-                        order: Order = place_limit_order(
-                            LimitOrder(
-                                ticker=BASE_TICKER,
-                                quantity=base_position.quantity
-                                - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                                limit_price=base_position.currentPrice
-                                * (1 - LEV_DIFF_INVEST / 8),  # TODO
-                                # limit_price=buy_order.limitPrice,
-                                type=LimitOrderType.SELL,
-                            )
-                        )
-                        # order: Order = place_market_order(
-                        #     MarketOrder(
-                        #         ticker=BASE_TICKER,
-                        #         quantity=base_position.quantity
-                        #         - 0.1,  # Dont sell everything, otherwise I cant query the price(may no longer be true)
-                        #         type=MarketOrderType.SELL,
-                        #     )
-                        # )
-                        ID = order.id
-
-                        filled = wait_for_order_or_cancel(
-                            id=order.id, max_wait_seconds=3 * 60
-                        )
-                        if not filled:
-                            trader_state = trader_state.ORDER_FAILED
-                            send_message("Sell order failed")
-                        else:
-                            trader_state = State.INITIALIZING  # TODO
-                            send_message("Sell order succeeded")
-                    except Exception as e:
-                        send_message(f"Erro placing order: {str(e)}")
-                        trader_state = State.ORDER_FAILED
-
-            case State.ORDER_FAILED:
-                send_message("Landed in order failed. Will Re-initialize")
-                trader_state = trader_state.INITIALIZING
-            case _:
-                raise "Unknown state"
+        trader_state = trader_state.process(base_position, lev_position, curdatetime)
 
         # Schedule the next run based on absolute time
         next_run += INTERVAL

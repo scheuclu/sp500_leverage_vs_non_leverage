@@ -48,16 +48,27 @@ pyright
 
 ## Architecture
 
-### State Machine (live_trading.py)
-The bot operates as a state machine:
+### State Pattern (live_trading.py)
+The bot uses a class-based State Pattern. Each state is a class inheriting from `TraderState` with a `process()` method that returns the next state:
+
 ```
-INITIALIZING → READY_TO_INVEST → INVESTED_IN_NON_LEVERAGE → READY_TO_INVEST (loop)
-                                                         ↓
-                                                   ORDER_FAILED (error recovery)
+TraderState (ABC)
+├── Initializing           → ReadyToInvest
+├── ReadyToInvest          → self | OrderFailed | InvestedInNonLeverage
+├── InvestedInNonLeverage  → self | Initializing | OrderFailed
+└── OrderFailed            → Initializing
 ```
 
+State transitions:
+- `Initializing`: Cancels open orders, sells excess holdings → `ReadyToInvest`
+- `ReadyToInvest`: Monitors leveraged asset divergence, places buy order when threshold met → `InvestedInNonLeverage`
+- `InvestedInNonLeverage`: Waits for base price change, places sell order → `Initializing`
+- `OrderFailed`: Recovery state → `Initializing`
+
+The main loop simply calls `trader_state.process(base_position, lev_position, curdatetime)` each iteration.
+
 ### Core Modules
-- **sp500_bot.live_trading** - Main trading bot with state machine logic, limit orders, Telegram notifications
+- **sp500_bot.live_trading** - Main trading bot with State Pattern, limit orders, Telegram notifications
 - **sp500_bot.t212** - Trading 212 API wrapper (orders, portfolio queries, instrument metadata)
 - **sp500_bot.models** - Auto-generated Pydantic models from api.json using datamodel-codegen
 - **sp500_bot.utils** - Exchange schedule utilities (market open checks)
