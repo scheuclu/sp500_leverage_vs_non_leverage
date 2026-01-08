@@ -1,16 +1,16 @@
 import logging
+import os
 import time
 from enum import Enum
 
 import requests
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
 from sp500_bot.models import Order, Position, Cash, TradableInstrument, Exchange
 from sp500_bot.tgbot import send_message
-from dotenv import load_dotenv
 
 load_dotenv()
-import os
 
 logging.basicConfig(
     level=logging.DEBUG,

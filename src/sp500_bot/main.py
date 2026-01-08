@@ -1,12 +1,13 @@
 import os
+import time
 
 import requests
-from sp500_bot.models import TradableInstrument, Exchange, WorkingSchedule, Position
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
+from sp500_bot.models import TradableInstrument, Exchange, WorkingSchedule, Position
+
 load_dotenv()
-import time
 
 TRADING212_KEY = os.environ["TRADING212_KEY"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]

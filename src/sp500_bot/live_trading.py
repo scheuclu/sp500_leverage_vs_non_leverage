@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-from sp500_bot.models import TradableInstrument, Position, Exchange, Order, Cash
-from sp500_bot.sb import write_positions, APIResponse
+from sp500_bot.models import Position, Order, Cash
+from sp500_bot.sb import write_positions
 from sp500_bot.t212 import (
     fetch_instruments,
     Trading212Ticker,
@@ -86,7 +86,7 @@ class Initializing(TraderState):
         time.sleep(10)
         base_position, lev_position = get_current_positions()
         if base_position.quantity > 0.15:
-            order: Order = place_market_order(
+            place_market_order(
                 MarketOrder(
                     ticker=BASE_TICKER,
                     quantity=base_position.quantity - 0.1,
@@ -298,7 +298,7 @@ def main():
             time.sleep(300)
             continue
 
-        response: APIResponse = write_positions([base_position, lev_position])
+        write_positions([base_position, lev_position])
         curdatetime = datetime.now()
 
         trader_state = trader_state.process(base_position, lev_position, curdatetime)
