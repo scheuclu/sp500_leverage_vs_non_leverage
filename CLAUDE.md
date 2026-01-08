@@ -48,21 +48,51 @@ pyright
 
 ## Architecture
 
-### State Machine (live_trading.py)
-The bot operates as a state machine:
+### State Pattern (live_trading.py)
+The bot uses a class-based State Pattern. Each state is a class inheriting from `TraderState` with a `process()` method that returns the next state:
+
 ```
-INITIALIZING → READY_TO_INVEST → INVESTED_IN_NON_LEVERAGE → READY_TO_INVEST (loop)
-                                                         ↓
-                                                   ORDER_FAILED (error recovery)
+TraderState (ABC)
+├── Initializing           → ReadyToInvest
+├── ReadyToInvest          → self | OrderFailed | InvestedInNonLeverage
+├── InvestedInNonLeverage  → self | Initializing | OrderFailed
+└── OrderFailed            → Initializing
 ```
 
+State transitions:
+- `Initializing`: Cancels open orders, sells excess holdings → `ReadyToInvest`
+- `ReadyToInvest`: Monitors leveraged asset divergence, places buy order when threshold met → `InvestedInNonLeverage`
+- `InvestedInNonLeverage`: Waits for base price change, places sell order → `Initializing`
+- `OrderFailed`: Recovery state → `Initializing`
+
+The main loop simply calls `trader_state.process(base_position, lev_position, curdatetime)` each iteration.
+
 ### Core Modules
-- **sp500_bot.live_trading** - Main trading bot with state machine logic, limit orders, Telegram notifications
-- **sp500_bot.t212** - Trading 212 API wrapper (orders, portfolio queries, instrument metadata)
+- **sp500_bot.live_trading** - Main trading bot with State Pattern, limit orders, Telegram notifications
+- **sp500_bot.t212** - Trading 212 API wrapper with built-in rate limiting
 - **sp500_bot.models** - Auto-generated Pydantic models from api.json using datamodel-codegen
 - **sp500_bot.utils** - Exchange schedule utilities (market open checks)
 - **sp500_bot.sb** - Supabase database helper for writing position snapshots
 - **sp500_bot.tgbot** - Telegram notification sender
+
+### Rate Limiting (t212.py)
+The `RateLimiter` class automatically enforces Trading 212 API rate limits. Each function calls `_rate_limiter.wait(endpoint)` before making a request, which sleeps if insufficient time has passed since the last call.
+
+| Endpoint | Limit | Functions |
+|----------|-------|-----------|
+| `portfolio` | 5s | `fetch_positions()` |
+| `portfolio_ticker` | 1s | `fetch_single_holding()` |
+| `account_cash` | 2s | `fetch_account_cash()` |
+| `orders_get` | 5s | `fetch_open_orders()` |
+| `order_by_id` | 1s | `fetch_open_order()`, `has_order_been_filled()` |
+| `orders_limit` | 2s | `place_limit_order()` |
+| `orders_market` | 1.2s | `place_buy_order()`, `place_market_order()` |
+| `orders_stop` | 2s | `place_sell_order()` |
+| `orders_cancel` | 1.2s | `cancel_order_by_id()` |
+| `instruments` | 50s | `fetch_instruments()` |
+| `exchanges` | 30s | `fetch_exchanges()` |
+
+Rate limits are defined in `RateLimiter.LIMITS` and derived from `api.json`.
 
 ### Data Flow
 1. Real-time polling via Trading 212 API (20-second intervals)
