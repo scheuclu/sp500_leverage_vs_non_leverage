@@ -1,7 +1,7 @@
 import os
 import plotly.graph_objects as go
 import requests
-from models import TradableInstrument, Exchange, WorkingSchedule, Position
+from sp500_bot.models import TradableInstrument, Exchange, WorkingSchedule, Position
 from dotenv import load_dotenv
 from plotly.subplots import make_subplots
 import plotly.io as pio
@@ -14,7 +14,7 @@ from supabase import Client, create_client
 from datetime import datetime, timedelta, date
 from pydantic import BaseModel
 from plotly.subplots import make_subplots
-from t212 import Trading212Ticker
+from sp500_bot.t212 import Trading212Ticker
 
 load_dotenv()
 

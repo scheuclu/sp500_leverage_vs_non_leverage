@@ -2,11 +2,11 @@ import os
 import logging
 from more_itertools.recipes import quantify
 
-from models import TradableInstrument, Position, Exchange, Order, Cash
+from sp500_bot.models import TradableInstrument, Position, Exchange, Order, Cash
 from dotenv import load_dotenv
-from sb import write_positions, APIResponse
+from sp500_bot.sb import write_positions, APIResponse
 
-from t212 import (
+from sp500_bot.t212 import (
     fetch_instruments,
     Trading212Ticker,
     fetch_positions,
@@ -22,9 +22,9 @@ from t212 import (
     MarketOrder,
     MarketOrderType,
 )
-from utils import are_positions_tradeable
+from sp500_bot.utils import are_positions_tradeable
 import time
-from tgbot import send_message
+from sp500_bot.tgbot import send_message
 from enum import Enum
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
@@ -105,7 +105,7 @@ def get_current_positions() -> tuple[Position, Position]:
     return base_position, lev_position
 
 
-if __name__ == "__main__":
+def main():
     instruments: list[TradableInstrument] = fetch_instruments()
     exchanges: list[Exchange] = fetch_exchanges()
 
@@ -267,5 +267,9 @@ if __name__ == "__main__":
         logging.info(f"Sleeping for {round(sleep_time, 4)} s.")
         if sleep_time > 0:
             time.sleep(sleep_time)
-        else:  # If we’re running behind schedule, skip missed intervals
+        else:  # If we're running behind schedule, skip missed intervals
             next_run = time.time()
+
+
+if __name__ == "__main__":
+    main()

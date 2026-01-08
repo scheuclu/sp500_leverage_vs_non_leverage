@@ -1,7 +1,7 @@
 import os
 import plotly.graph_objects as go
 import requests
-from models import TradableInstrument, Exchange, WorkingSchedule, Position
+from sp500_bot.models import TradableInstrument, Exchange, WorkingSchedule, Position
 from dotenv import load_dotenv
 from plotly.subplots import make_subplots
 import plotly.io as pio

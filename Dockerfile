@@ -6,9 +6,7 @@ WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml uv.lock ./
-COPY ingestion.py ./
-COPY models.py ./
-# (Add any other local modules you import)
+COPY src/ ./src/
 
 # Install dependencies using uv
 RUN uv sync --frozen --no-dev
@@ -23,11 +21,10 @@ COPY --from=build /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy source code
-COPY ingestion.py ./
-COPY models.py ./
+COPY src/ ./src/
 
 # Set env to production
 ENV PYTHONUNBUFFERED=1
 
-# Default command
-CMD ["python", "ingestion.py"]
+# Default command - run the ingestion module
+CMD ["python", "-m", "sp500_bot.ingestion"]
