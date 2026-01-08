@@ -1,4 +1,4 @@
 while true; do
-  python live_trading.py
+  python -m sp500_bot.live_trading
   sleep 30
 done

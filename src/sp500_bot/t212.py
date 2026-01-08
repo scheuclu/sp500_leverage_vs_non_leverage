@@ -1,13 +1,13 @@
 import logging
 
 import requests
-from models import Order, Position, Cash, TradableInstrument, Exchange
+from sp500_bot.models import Order, Position, Cash, TradableInstrument, Exchange
 from dotenv import load_dotenv
 
 load_dotenv()
 import os
 from pydantic import BaseModel, Field
-from tgbot import send_message
+from sp500_bot.tgbot import send_message
 
 logging.basicConfig(
     level=logging.INFO,

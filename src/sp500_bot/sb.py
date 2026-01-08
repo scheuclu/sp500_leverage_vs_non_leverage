@@ -1,7 +1,7 @@
 import os
 from postgrest import APIResponse
 
-from models import (
+from sp500_bot.models import (
     Position,
 )
 from dotenv import load_dotenv

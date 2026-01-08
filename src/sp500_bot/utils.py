@@ -1,4 +1,4 @@
-from models import (
+from sp500_bot.models import (
     TradableInstrument,
     Exchange,
     WorkingSchedule,

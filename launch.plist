@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.syncscript</string>
+
+    <!-- Run every 2 minutes -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+
+    <!-- Path to the script -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/lukas/projects/sp500_leverage_vs_non_leverage/.venv/bin/python</string>
+        <string>-m</string>
+        <string>sp500_bot.main</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/lukas/projects/sp500_leverage_vs_non_leverage</string>
+
+    <!-- Make sure output is captured -->
+    <key>StandardOutPath</key>
+    <string>/Users/lukas/projects/sp500_leverage_vs_non_leverage/run_sync.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/lukas/projects/sp500_leverage_vs_non_leverage/run_sync.err</string>
+
+    <!-- Run once at load (boot/login) -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Keep alive even after sleep/wake -->
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>

@@ -1320,9 +1320,10 @@ wheels = [
 [[package]]
 name = "sp500-leverage-vs-non-leverage"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "datamodel-code-generator" },
+    { name = "more-itertools" },
     { name = "plotly" },
     { name = "pyright" },
     { name = "python-dotenv" },
@@ -1335,6 +1336,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "datamodel-code-generator", specifier = ">=0.35.0" },
+    { name = "more-itertools", specifier = ">=10.0.0" },
     { name = "plotly", specifier = ">=6.3.1" },
     { name = "pyright", specifier = ">=1.1.407" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
