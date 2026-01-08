@@ -50,12 +50,17 @@ class State(Enum):
         self.cash = cash
 
 
+def get_supabase_client() -> Client:
+    """Get Supabase client."""
+    SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+    SUPABASE_URL = os.environ["SUPABASE_URL"]
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
 @st.cache_data(ttl=300)
 def load_data():
     """Load all position data from Supabase."""
-    SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-    SUPABASE_URL = os.environ["SUPABASE_URL"]
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    supabase = get_supabase_client()
 
     all_data = []
     batch_size = 1000
@@ -76,6 +81,32 @@ def load_data():
         offset += batch_size
 
     return all_data
+
+
+@st.cache_data(ttl=60)
+def load_state_data():
+    """Load state history from Supabase."""
+    supabase = get_supabase_client()
+
+    all_states = []
+    batch_size = 1000
+    offset = 0
+
+    while True:
+        response = (
+            supabase.table("state")
+            .select("*")
+            .order("created_at")
+            .range(offset, offset + batch_size - 1)
+            .execute()
+        )
+        rows = response.data
+        if not rows:
+            break
+        all_states.extend(rows)
+        offset += batch_size
+
+    return all_states
 
 
 def process_data(all_data):
@@ -145,6 +176,7 @@ def compute_signals(data: dict[date, DateData]):
 # Load and process data
 with st.spinner("Loading data from Supabase..."):
     all_data = load_data()
+    state_data = load_state_data()
     data = process_data(all_data)
     trader_state = compute_signals(data)
 
@@ -158,6 +190,50 @@ selected_date = st.sidebar.selectbox(
 
 # Get data for selected date
 selected_data = data[selected_date]
+
+# Display current trader state (from live trading bot)
+if state_data:
+    latest_state = state_data[-1]
+    st.subheader("Live Trading Bot Status")
+    state_col1, state_col2, state_col3, state_col4 = st.columns(4)
+
+    with state_col1:
+        state_name = latest_state.get("state_name", "Unknown")
+        # Color-code the state
+        if state_name == "ReadyToInvest":
+            st.metric("Current State", "🟢 " + state_name)
+        elif state_name == "InvestedInNonLeverage":
+            st.metric("Current State", "🔵 " + state_name)
+        elif state_name == "Initializing":
+            st.metric("Current State", "🟡 " + state_name)
+        elif state_name == "OrderFailed":
+            st.metric("Current State", "🔴 " + state_name)
+        else:
+            st.metric("Current State", state_name)
+
+    with state_col2:
+        base_val = latest_state.get("base_value_at_last_change", 0)
+        st.metric("Base Price at Last Change", f"€{base_val:.2f}" if base_val else "N/A")
+
+    with state_col3:
+        lev_val = latest_state.get("lev_value_at_last_change", 0)
+        st.metric("Lev Price at Last Change", f"€{lev_val:.2f}" if lev_val else "N/A")
+
+    with state_col4:
+        time_str = latest_state.get("time_last_base_change", "")
+        if time_str:
+            last_change_dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            st.metric("Last Base Change", last_change_dt.strftime("%H:%M:%S"))
+        else:
+            st.metric("Last Base Change", "N/A")
+
+    # Show state update timestamp
+    created_at = latest_state.get("created_at", "")
+    if created_at:
+        created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        st.caption(f"State last updated: {created_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    st.divider()
 
 # Calculate performance metrics
 buy_prices = [
@@ -287,3 +363,115 @@ with st.expander("Trade Details"):
         for i, (b, s) in enumerate(zip(buy_prices, sell_prices)):
             pct = (s / b - 1) * 100
             st.write(f"  Trade {i+1}: Buy €{b:.2f} → Sell €{s:.2f} ({pct:+.2f}%)")
+
+# State timeline chart
+if state_data:
+    st.subheader("Trader State Timeline")
+
+    # Prepare data for the chart
+    state_times = []
+    state_values = []
+    state_names = []
+    state_colors = []
+
+    # Map states to numeric values and colors
+    state_map = {
+        "Initializing": 1,
+        "ReadyToInvest": 2,
+        "InvestedInNonLeverage": 3,
+        "OrderFailed": 0,
+    }
+    color_map = {
+        "Initializing": "yellow",
+        "ReadyToInvest": "green",
+        "InvestedInNonLeverage": "blue",
+        "OrderFailed": "red",
+    }
+
+    for state_entry in state_data:
+        created_at = state_entry.get("created_at", "")
+        state_name = state_entry.get("state_name", "Unknown")
+        if created_at and state_name in state_map:
+            state_times.append(datetime.fromisoformat(created_at.replace("Z", "+00:00")))
+            state_values.append(state_map[state_name])
+            state_names.append(state_name)
+            state_colors.append(color_map[state_name])
+
+    if state_times:
+        # Filter to selected date if desired
+        selected_state_indices = [
+            i for i, t in enumerate(state_times)
+            if t.date() == selected_date
+        ]
+
+        if selected_state_indices:
+            filtered_times = [state_times[i] for i in selected_state_indices]
+            filtered_values = [state_values[i] for i in selected_state_indices]
+            filtered_names = [state_names[i] for i in selected_state_indices]
+            filtered_colors = [state_colors[i] for i in selected_state_indices]
+        else:
+            # Show all data if no data for selected date
+            filtered_times = state_times
+            filtered_values = state_values
+            filtered_names = state_names
+            filtered_colors = state_colors
+            st.caption("No state data for selected date, showing all available data")
+
+        state_fig = go.Figure()
+
+        # Add step line for state transitions
+        state_fig.add_trace(
+            go.Scatter(
+                x=filtered_times,
+                y=filtered_values,
+                mode="lines+markers",
+                line=dict(shape="hv", color="gray", width=1),
+                marker=dict(
+                    size=10,
+                    color=filtered_colors,
+                    line=dict(width=1, color="black"),
+                ),
+                text=filtered_names,
+                hovertemplate="<b>%{text}</b><br>Time: %{x}<extra></extra>",
+                name="State",
+            )
+        )
+
+        # Update layout
+        state_fig.update_layout(
+            height=250,
+            yaxis=dict(
+                tickmode="array",
+                tickvals=[0, 1, 2, 3],
+                ticktext=["OrderFailed", "Initializing", "ReadyToInvest", "InvestedInNonLev"],
+                range=[-0.5, 3.5],
+            ),
+            xaxis_title="Time",
+            yaxis_title="State",
+            hovermode="x unified",
+            margin=dict(l=20, r=20, t=20, b=20),
+        )
+
+        st.plotly_chart(state_fig, use_container_width=True)
+
+# State history (collapsible)
+if state_data:
+    with st.expander("State History (Recent)"):
+        # Show last 20 state changes
+        recent_states = state_data[-20:][::-1]  # Most recent first
+        for state_entry in recent_states:
+            state_name = state_entry.get("state_name", "Unknown")
+            created_at = state_entry.get("created_at", "")
+            base_val = state_entry.get("base_value_at_last_change", 0)
+            lev_val = state_entry.get("lev_value_at_last_change", 0)
+
+            if created_at:
+                created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                time_str = created_dt.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                time_str = "N/A"
+
+            # State emoji
+            emoji = {"ReadyToInvest": "🟢", "InvestedInNonLeverage": "🔵", "Initializing": "🟡", "OrderFailed": "🔴"}.get(state_name, "⚪")
+
+            st.write(f"{emoji} **{state_name}** @ {time_str} | Base: €{base_val:.2f}, Lev: €{lev_val:.2f}")
