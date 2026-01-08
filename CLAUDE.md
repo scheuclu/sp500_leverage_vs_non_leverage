@@ -101,8 +101,9 @@ Rate limits are defined in `RateLimiter.LIMITS` and derived from `api.json`.
 
 ### Key Parameters (live_trading.py)
 ```python
-LEV_DIFF_INVEST = 0.004        # 0.4% divergence threshold
-TIME_DIFF_INVEST = timedelta(minutes=2)  # Hold time before re-investing
+LEV_DIFF_INVEST = 0.004        # 0.4% divergence threshold to trigger buy
+TIME_DIFF_INVEST = timedelta(minutes=2)  # Min time before buying
+STOP_LOSS_THRESHOLD = 0.005   # 0.5% - sell if base drops this much below buy price
 BASE_TICKER = Trading212Ticker.SP500_EUR    # 1x ETF (VUAAm_EQ)
 LEV_TICKER = Trading212Ticker.SP500_EUR_L   # 3x ETF (US5Ld_EQ)
 INTERVAL = 20  # seconds between trading loops

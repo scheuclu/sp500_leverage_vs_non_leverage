@@ -45,6 +45,7 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 
 LEV_DIFF_INVEST = 0.004
 TIME_DIFF_INVEST = timedelta(minutes=2)
+STOP_LOSS_THRESHOLD = 0.005  # 0.5% - sell if base drops this much below buy price
 
 BASE_TICKER = Trading212Ticker.SP500_EUR
 LEV_TICKER = Trading212Ticker.SP500_EUR_L
@@ -152,7 +153,14 @@ class ReadyToInvest(TraderState):
                     return OrderFailed(signal_data=self.signal_data)
                 else:
                     send_message("Buy order succeeded")
-                    return InvestedInNonLeverage(signal_data=self.signal_data)
+                    # Record the buy price as new baseline for sell decision
+                    return InvestedInNonLeverage(
+                        signal_data=SignalData(
+                            time_last_base_change=curdatetime,
+                            base_value_at_last_change=base_position.currentPrice,
+                            lev_value_at_last_change=lev_position.currentPrice,
+                        )
+                    )
             except Exception as e:
                 send_message(f"Error placing buy order: {str(e)}")
                 return OrderFailed(signal_data=self.signal_data)
@@ -168,38 +176,58 @@ class InvestedInNonLeverage(TraderState):
         lev_position: Position,
         curdatetime: datetime,
     ) -> InvestedInNonLeverage | Initializing | OrderFailed:
-        if base_position.currentPrice != self.signal_data.base_value_at_last_change:
-            # Base price changed - sell and go back to initializing
-            send_message("Placing sell order")
-            time.sleep(2)  # because we may just have made a buy order
-            try:
-                order: Order = place_limit_order(
-                    LimitOrder(
-                        ticker=BASE_TICKER,
-                        quantity=base_position.quantity - 0.1,  # Don't sell everything
-                        limit_price=base_position.currentPrice * (1 - LEV_DIFF_INVEST / 8),
-                        type=LimitOrderType.SELL,
+        stop_loss_price = self.signal_data.base_value_at_last_change * (1 - STOP_LOSS_THRESHOLD)
+
+        if base_position.currentPrice > self.signal_data.base_value_at_last_change:
+            # Base price moved UP - sell and take profit
+            send_message("Base price increased, placing sell order")
+            return self._sell_position(base_position, lev_position, curdatetime)
+
+        elif base_position.currentPrice < stop_loss_price:
+            # Stop-loss triggered - cut losses
+            send_message(
+                f"Stop-loss triggered! Price {base_position.currentPrice} < {stop_loss_price:.2f}"
+            )
+            return self._sell_position(base_position, lev_position, curdatetime)
+
+        # No action needed, stay in same state
+        return self
+
+    def _sell_position(
+        self,
+        base_position: Position,
+        lev_position: Position,
+        curdatetime: datetime,
+    ) -> Initializing | OrderFailed:
+        """Helper to sell position and transition state."""
+        time.sleep(2)  # because we may just have made a buy order
+        # Re-fetch positions to get accurate quantity after buy
+        base_position, lev_position = get_current_positions()
+        try:
+            order: Order = place_limit_order(
+                LimitOrder(
+                    ticker=BASE_TICKER,
+                    quantity=base_position.quantity - 0.1,  # Don't sell everything
+                    limit_price=base_position.currentPrice * (1 - LEV_DIFF_INVEST / 8),
+                    type=LimitOrderType.SELL,
+                )
+            )
+            filled = wait_for_order_or_cancel(id=order.id, max_wait_seconds=3 * 60)
+            if not filled:
+                send_message("Sell order failed")
+                return OrderFailed(signal_data=self.signal_data)
+            else:
+                send_message("Sell order succeeded")
+                return Initializing(
+                    signal_data=SignalData(
+                        time_last_base_change=curdatetime,
+                        base_value_at_last_change=base_position.currentPrice,
+                        lev_value_at_last_change=lev_position.currentPrice,
                     )
                 )
-                filled = wait_for_order_or_cancel(id=order.id, max_wait_seconds=3 * 60)
-                if not filled:
-                    send_message("Sell order failed")
-                    return OrderFailed(signal_data=self.signal_data)
-                else:
-                    send_message("Sell order succeeded")
-                    return Initializing(
-                        signal_data=SignalData(
-                            time_last_base_change=curdatetime,
-                            base_value_at_last_change=base_position.currentPrice,
-                            lev_value_at_last_change=lev_position.currentPrice,
-                        )
-                    )
-            except Exception as e:
-                send_message(f"Error placing order: {str(e)}")
-                return OrderFailed(signal_data=self.signal_data)
-
-        # No price change, stay in same state
-        return self
+        except Exception as e:
+            send_message(f"Error placing order: {str(e)}")
+            return OrderFailed(signal_data=self.signal_data)
 
 
 class OrderFailed(TraderState):
@@ -243,8 +271,8 @@ def get_current_positions() -> tuple[Position, Position]:
 
 
 def main():
-    instruments: list[TradableInstrument] = fetch_instruments()
-    exchanges: list[Exchange] = fetch_exchanges()
+    instruments = fetch_instruments()
+    exchanges = fetch_exchanges()
 
     INTERVAL = 20  # seconds
     next_run = time.time()
@@ -258,7 +286,6 @@ def main():
     )
 
     while True:
-        start = time.time()
         logging.info(f"{trader_state.__class__.__name__}")
 
         base_position, lev_position = get_current_positions()
