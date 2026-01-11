@@ -25,9 +25,7 @@ def _get_client() -> Client:
 def write_positions(positions: list[Position]) -> None:
     """Write position data to the 'data' table."""
     client = _get_client()
-    client.table("data").insert(
-        {"positions": [p.model_dump_json() for p in positions]}
-    ).execute()
+    client.table("data").insert({"positions": [p.model_dump_json() for p in positions]}).execute()
 
 
 def write_state(

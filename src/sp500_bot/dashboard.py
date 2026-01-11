@@ -41,9 +41,7 @@ class State(Enum):
     INVESTED_IN_NON_LEVERAGE = 1
     READY_TO_INVEST = 2
 
-    def __init__(
-        self, code, num_shares_leverage=0, num_shares_non_leverage=0, cash=10000
-    ):
+    def __init__(self, code, num_shares_leverage=0, num_shares_non_leverage=0, cash=10000):
         self.code = code
         self.num_shares_leverage = num_shares_leverage
         self.num_shares_non_leverage = num_shares_non_leverage
@@ -351,18 +349,18 @@ with st.expander("Trade Details"):
     if selected_data.buy_signal_times:
         st.write("**Buy Signals:**")
         for i, (t, p) in enumerate(zip(selected_data.buy_signal_times, buy_prices)):
-            st.write(f"  {i+1}. {t.strftime('%H:%M:%S')} @ €{p:.2f}")
+            st.write(f"  {i + 1}. {t.strftime('%H:%M:%S')} @ €{p:.2f}")
 
     if selected_data.sell_signal_times:
         st.write("**Sell Signals:**")
         for i, (t, p) in enumerate(zip(selected_data.sell_signal_times, sell_prices)):
-            st.write(f"  {i+1}. {t.strftime('%H:%M:%S')} @ €{p:.2f}")
+            st.write(f"  {i + 1}. {t.strftime('%H:%M:%S')} @ €{p:.2f}")
 
     if buy_prices and sell_prices:
         st.write("**Trade Results:**")
         for i, (b, s) in enumerate(zip(buy_prices, sell_prices)):
             pct = (s / b - 1) * 100
-            st.write(f"  Trade {i+1}: Buy €{b:.2f} → Sell €{s:.2f} ({pct:+.2f}%)")
+            st.write(f"  Trade {i + 1}: Buy €{b:.2f} → Sell €{s:.2f} ({pct:+.2f}%)")
 
 # State timeline chart
 if state_data:
@@ -399,10 +397,7 @@ if state_data:
 
     if state_times:
         # Filter to selected date if desired
-        selected_state_indices = [
-            i for i, t in enumerate(state_times)
-            if t.date() == selected_date
-        ]
+        selected_state_indices = [i for i, t in enumerate(state_times) if t.date() == selected_date]
 
         if selected_state_indices:
             filtered_times = [state_times[i] for i in selected_state_indices]
@@ -472,6 +467,13 @@ if state_data:
                 time_str = "N/A"
 
             # State emoji
-            emoji = {"ReadyToInvest": "🟢", "InvestedInNonLeverage": "🔵", "Initializing": "🟡", "OrderFailed": "🔴"}.get(state_name, "⚪")
+            emoji = {
+                "ReadyToInvest": "🟢",
+                "InvestedInNonLeverage": "🔵",
+                "Initializing": "🟡",
+                "OrderFailed": "🔴",
+            }.get(state_name, "⚪")
 
-            st.write(f"{emoji} **{state_name}** @ {time_str} | Base: €{base_val:.2f}, Lev: €{lev_val:.2f}")
+            st.write(
+                f"{emoji} **{state_name}** @ {time_str} | Base: €{base_val:.2f}, Lev: €{lev_val:.2f}"
+            )

@@ -36,9 +36,7 @@ def main():
 
     while True:
         ticker_values: list[str] = [i.value for i in Trading212Ticker.__members__.values()]
-        positions: list[Position] = [
-            p for p in fetch_positions() if p.ticker in ticker_values
-        ]
+        positions: list[Position] = [p for p in fetch_positions() if p.ticker in ticker_values]
 
         # Wait 5 min if markets are not open
         all_open: bool = are_positions_tradeable(exchanges, instruments, positions)

@@ -106,17 +106,16 @@ for date, price_non_leverage, price_leverage, rel_non_leverage, rel_leverage in 
     times, non_leverage, leverage, rel_diff_non_leverage, rel_diff_leverage
 ):
     # print(NUM_SHARES_NON_LEVERAGE*price_non_leverage+NUM_SHARES_LEVERAGE*price_leverage, NUM_SHARES_NON_LEVERAGE, NUM_SHARES_LEVERAGE)
-    if NUM_SHARES_LEVERAGE > 0 and datetime.fromisoformat(
-        date
-    ) - datetime.fromisoformat(date_last_trade) > timedelta(minutes=10):
+    if NUM_SHARES_LEVERAGE > 0 and datetime.fromisoformat(date) - datetime.fromisoformat(
+        date_last_trade
+    ) > timedelta(minutes=10):
         value_leverage = NUM_SHARES_LEVERAGE * price_leverage
         NUM_SHARES_NON_LEVERAGE += value_leverage / price_non_leverage * FX
         NUM_SHARES_LEVERAGE = 0
         print(f"Going out of leverage {date} -> {NUM_SHARES_NON_LEVERAGE}")
         date_last_trade = date
         print(
-            NUM_SHARES_NON_LEVERAGE * price_non_leverage
-            + NUM_SHARES_LEVERAGE * price_leverage,
+            NUM_SHARES_NON_LEVERAGE * price_non_leverage + NUM_SHARES_LEVERAGE * price_leverage,
             NUM_SHARES_NON_LEVERAGE,
             NUM_SHARES_LEVERAGE,
         )
@@ -132,8 +131,7 @@ for date, price_non_leverage, price_leverage, rel_non_leverage, rel_leverage in 
             NUM_SHARES_NON_LEVERAGE = 0
             date_last_trade = date
             print(
-                NUM_SHARES_NON_LEVERAGE * price_non_leverage
-                + NUM_SHARES_LEVERAGE * price_leverage,
+                NUM_SHARES_NON_LEVERAGE * price_non_leverage + NUM_SHARES_LEVERAGE * price_leverage,
                 NUM_SHARES_NON_LEVERAGE,
                 NUM_SHARES_LEVERAGE,
             )
@@ -143,10 +141,7 @@ print(NUM_SHARES_NON_LEVERAGE)
 ######
 
 dts = [datetime.fromisoformat(t) for t in times]
-day = [
-    datetime.fromisoformat(t).hour * 60 + datetime.fromisoformat(t).minute
-    for t in times
-]
+day = [datetime.fromisoformat(t).hour * 60 + datetime.fromisoformat(t).minute for t in times]
 dates = [datetime.fromisoformat(t).date() for t in times]
 
 

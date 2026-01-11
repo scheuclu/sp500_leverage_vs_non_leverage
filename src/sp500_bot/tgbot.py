@@ -22,6 +22,7 @@ def get_chat_ids():
             chat_type = chat.get("type")
             print(f"Chat ID: {chat_id} | Type: {chat_type}")
 
+
 def send_message(text: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text}
@@ -29,6 +30,6 @@ def send_message(text: str):
     assert r.status_code == 200
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # get_chat_ids()
     send_message("ABC")
