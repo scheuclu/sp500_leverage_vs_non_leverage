@@ -81,9 +81,7 @@ rolling_corr = pd.Series(leverage).rolling(window).corr(pd.Series(non_leverage))
 
 fig = make_subplots(specs=[[{"secondary_y": True}]])
 trace_leverage = go.Scatter(x=times, y=leverage, name="5x", mode="markers+lines")
-trace_non_leverage = go.Scatter(
-    x=times, y=non_leverage, name="1x", mode="markers+lines"
-)
+trace_non_leverage = go.Scatter(x=times, y=non_leverage, name="1x", mode="markers+lines")
 
 fig.add_trace(
     trace_non_leverage,

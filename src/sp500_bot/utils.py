@@ -33,8 +33,6 @@ def are_positions_tradeable(
     positions: list[Position],
 ) -> bool:
     working_schedule_ids = [instruments[p.ticker].workingScheduleId for p in positions]
-    workingSchedules: dict[int, WorkingSchedule] = get_working_schedules(
-        exchanges=exchanges
-    )
+    workingSchedules: dict[int, WorkingSchedule] = get_working_schedules(exchanges=exchanges)
     ws = [workingSchedules[id] for id in working_schedule_ids]
     return all([is_exchange_open(w.timeEvents) for w in ws])

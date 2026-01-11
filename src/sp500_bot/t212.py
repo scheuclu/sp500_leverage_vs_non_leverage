@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import time
@@ -7,8 +8,17 @@ import requests
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-from sp500_bot.models import Order, Position, Cash, TradableInstrument, Exchange
+from sp500_bot.models import (
+    Order,
+    Position,
+    Cash,
+    TradableInstrument,
+    Exchange,
+    HistoricalOrder,
+    PaginatedResponseHistoricalOrder,
+)
 from sp500_bot.tgbot import send_message
+from urllib.parse import urlencode
 
 load_dotenv()
 
@@ -46,6 +56,7 @@ class RateLimiter:
         "order_by_id": 1.0,
         "portfolio": 5.0,
         "portfolio_ticker": 1.0,
+        "historical_orders": 10.0,
     }
 
     def __init__(self):
@@ -127,9 +138,7 @@ def place_buy_order(ticker: Trading212Ticker, quantity: float) -> Order:
     return Order(**data)
 
 
-def place_sell_order(
-    ticker: Trading212Ticker, quantity: float, stop_price: float
-) -> Order:
+def place_sell_order(ticker: Trading212Ticker, quantity: float, stop_price: float) -> Order:
     """Selling an asset with specific ticker on Trading212.
 
     The `quantity` needs to be negative.
@@ -302,9 +311,63 @@ def fetch_exchanges() -> list[Exchange]:
     return exchanges
 
 
-if __name__ == "__main__":
-    order: Order = place_market_order(
-        MarketOrder(
-            ticker=Trading212Ticker.SP500_ACC, quantity=20.0, type=MarketOrderType.BUY
-        )
+def fetch_historical_orders(
+    ticker: Trading212Ticker, start_date: datetime.date | None, end_date: datetime.date | None
+) -> list[HistoricalOrder]:
+    """Fetch historical orders for a ticker within a date range.
+
+    Uses cursor-based pagination to retrieve orders from the Trading 212 API.
+    The cursor starts at end_date and paginates backwards, filtering results
+    to only include orders created on start_date.
+
+    Args:
+        ticker: The Trading 212 ticker to fetch orders for.
+        start_date: Only return orders created on this date.
+        end_date: Start pagination cursor from end of this date.
+
+    Returns:
+        List of HistoricalOrder objects matching the ticker and start_date.
+    """
+    import requests
+
+    url = "https://demo.trading212.com/api/v0/equity/history/orders"
+
+    # start_time = int(1000* datetime.datetime.combine(start_date, datetime.datetime.min.time()).timestamp())
+    end_time = int(
+        1000 * datetime.datetime.combine(end_date, datetime.datetime.max.time()).timestamp()
     )
+
+    results: list[HistoricalOrder] = []
+
+    query = {
+        "cursor": end_time,  # ms
+        "ticker": ticker.value,
+        "limit": "50",  # maximum 50
+    }
+    nextPagePath = f"{url}?{urlencode(query=query)}"
+
+    while nextPagePath:
+        response = requests.get(nextPagePath, headers=headers)
+        response.raise_for_status()
+        _rate_limiter.wait("historical_orders")
+
+        paginated = PaginatedResponseHistoricalOrder(**response.json())
+        if len(paginated.items) == 0:
+            nextPagePath = None
+        else:
+            nextPagePath = f"https://demo.trading212.com{paginated.nextPagePath}"
+            orders = [p for p in paginated.items if p.order.createdAt.date() == start_date]
+            results += orders
+            if len(orders) < len(paginated.items):
+                nextPagePath = None  # Some orders where at a different date
+    return results
+
+
+if __name__ == "__main__":
+    historical_orders = fetch_historical_orders(
+        ticker=Trading212Ticker.SP500_EUR,
+        start_date=datetime.date(2026, 1, 8),
+        end_date=datetime.date(2026, 1, 8),
+    )
+    for order in historical_orders:
+        print(order)
