@@ -39,6 +39,9 @@ python -m sp500_bot.ingestion
 # Launch dashboard visualization
 streamlit run src/sp500_bot/dashboard.py
 
+# Formatting
+ruff format .
+
 # Linting
 ruff check .
 
