@@ -107,6 +107,19 @@ def load_state_data():
     return all_states
 
 
+def filter_state_changes(state_data: list[dict]) -> list[dict]:
+    """Filter state data to only include entries where state changed from previous."""
+    if not state_data:
+        return []
+
+    filtered = [state_data[0]]  # Always include the first entry
+    for entry in state_data[1:]:
+        if entry.get("state_name") != filtered[-1].get("state_name"):
+            filtered.append(entry)
+
+    return filtered
+
+
 @st.cache_data(ttl=300)
 def load_historical_orders(selected_date: date) -> list[HistoricalOrder]:
     """Load historical orders for both tickers on a specific date."""
@@ -192,6 +205,7 @@ def compute_signals(data: dict[date, DateData]):
 with st.spinner("Loading data from Supabase..."):
     all_data = load_data()
     state_data = load_state_data()
+    state_changes = filter_state_changes(state_data)  # Only state transitions
     data = process_data(all_data)
     trader_state = compute_signals(data)
 
@@ -454,8 +468,8 @@ with st.expander("Trade Details"):
             pct = (s / b - 1) * 100
             st.write(f"  Trade {i + 1}: Buy €{b:.2f} → Sell €{s:.2f} ({pct:+.2f}%)")
 
-# State timeline chart
-if state_data:
+# State timeline chart (only show state changes, not every update)
+if state_changes:
     st.subheader("Trader State Timeline")
 
     # Prepare data for the chart
@@ -478,7 +492,7 @@ if state_data:
         "OrderFailed": "red",
     }
 
-    for state_entry in state_data:
+    for state_entry in state_changes:
         created_at = state_entry.get("created_at", "")
         state_name = state_entry.get("state_name", "Unknown")
         if created_at and state_name in state_map:
@@ -541,11 +555,11 @@ if state_data:
 
         st.plotly_chart(state_fig, use_container_width=True)
 
-# State history (collapsible)
-if state_data:
-    with st.expander("State History (Recent)"):
+# State history (collapsible) - only show actual state transitions
+if state_changes:
+    with st.expander("State Transitions (Recent)"):
         # Show last 20 state changes
-        recent_states = state_data[-20:][::-1]  # Most recent first
+        recent_states = state_changes[-20:][::-1]  # Most recent first
         for state_entry in recent_states:
             state_name = state_entry.get("state_name", "Unknown")
             created_at = state_entry.get("created_at", "")
