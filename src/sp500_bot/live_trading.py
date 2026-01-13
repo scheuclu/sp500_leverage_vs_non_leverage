@@ -134,7 +134,7 @@ class ReadyToInvest(TraderState):
         ):
             # Make Investment
             cash: Cash = fetch_account_cash()
-            quantity: float = cash.free / base_position.currentPrice
+            quantity: float = (cash.availableToTrade or 0) /base_position.currentPrice
             send_message(
                 f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
             )
@@ -263,7 +263,9 @@ def get_current_positions() -> tuple[Position, Position]:
     # Fetch positions if exchanges are open
     ticker_values: list[str] = [i.value for i in Trading212Ticker.__members__.values()]
     positions: dict[Trading212Ticker, Position] = {
-        p.ticker: p for p in fetch_positions() if p.ticker in ticker_values
+        p.instrument.ticker: p
+        for p in fetch_positions()
+        if p.instrument and p.instrument.ticker and p.instrument.ticker in ticker_values
     }
     base_position: Position = positions[BASE_TICKER.value]
     lev_position: Position = positions[LEV_TICKER.value]

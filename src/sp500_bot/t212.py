@@ -56,6 +56,7 @@ class RateLimiter:
         "order_by_id": 1.0,
         "portfolio": 5.0,
         "portfolio_ticker": 1.0,
+        "positions": 5.0,
         "historical_orders": 10.0,
     }
 
@@ -161,8 +162,8 @@ def place_sell_order(ticker: Trading212Ticker, quantity: float, stop_price: floa
 
 
 def fetch_positions() -> list[Position]:
-    url = "https://demo.trading212.com/api/v0/equity/portfolio"
-    _rate_limiter.wait("portfolio")
+    url = "https://demo.trading212.com/api/v0/equity/positions"
+    _rate_limiter.wait("positions")
     logging.debug("Calling fetch_positions()")
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -364,6 +365,10 @@ def fetch_historical_orders(
 
 
 if __name__ == "__main__":
+
+
+    positions=fetch_positions()
+
     historical_orders = fetch_historical_orders(
         ticker=Trading212Ticker.SP500_EUR,
         start_date=datetime.date(2026, 1, 8),
