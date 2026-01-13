@@ -10,8 +10,8 @@ from plotly.subplots import make_subplots
 from pydantic import BaseModel
 from supabase import Client, create_client
 
-from sp500_bot.models import Position
-from sp500_bot.t212 import Trading212Ticker
+from sp500_bot.models import HistoricalOrder, Position, Side
+from sp500_bot.t212 import Trading212Ticker, fetch_historical_orders
 
 load_dotenv()
 
@@ -107,6 +107,23 @@ def load_state_data():
     return all_states
 
 
+@st.cache_data(ttl=300)
+def load_historical_orders(selected_date: date) -> list[HistoricalOrder]:
+    """Load historical orders for both tickers on a specific date."""
+    orders: list[HistoricalOrder] = []
+    for ticker in [Trading212Ticker.SP500_EUR, Trading212Ticker.SP500_EUR_L]:
+        try:
+            ticker_orders = fetch_historical_orders(
+                ticker=ticker,
+                start_date=selected_date,
+                end_date=selected_date,
+            )
+            orders.extend(ticker_orders)
+        except Exception:
+            pass  # Skip if API call fails
+    return orders
+
+
 def process_data(all_data):
     """Process raw data into DateData structures."""
     unique_dates = sorted(
@@ -188,6 +205,10 @@ selected_date = st.sidebar.selectbox(
 
 # Get data for selected date
 selected_data = data[selected_date]
+
+# Load historical orders for selected date
+with st.spinner("Loading historical orders..."):
+    historical_orders = load_historical_orders(selected_date)
 
 # Display current trader state (from live trading bot)
 if state_data:
@@ -311,6 +332,77 @@ for t in selected_data.buy_signal_times:
 # Sell signals
 for t in selected_data.sell_signal_times:
     fig.add_vline(x=t, line=dict(color="red", width=2, dash="dash"), row=1, col=1)
+
+# Historical orders - separate by side and ticker
+if historical_orders:
+    for ticker_value, is_secondary, ticker_name in [
+        (BASE_TICKER, False, "Base"),
+        (LEV_TICKER, True, "Lev"),
+    ]:
+        for side, color in [(Side.BUY, "green"), (Side.SELL, "red")]:
+            # Filter orders for this ticker and side
+            filtered_orders = [
+                o
+                for o in historical_orders
+                if o.order and o.order.ticker == ticker_value and o.order.side == side
+            ]
+            if not filtered_orders:
+                continue
+
+            # Prepare data for scatter
+            times = []
+            prices = []
+            symbols = []
+            hover_texts = []
+
+            for ho in filtered_orders:
+                order = ho.order
+                if not order or not order.createdAt:
+                    continue
+
+                times.append(order.createdAt)
+                # Use limit price or fill price if available
+                price = order.limitPrice or (ho.fill.price if ho.fill else None) or order.stopPrice
+                prices.append(price)
+
+                # Filled = solid circle, not filled = open circle
+                is_filled = ho.fill is not None
+                symbols.append("circle" if is_filled else "circle-open")
+
+                # Build hover text
+                status = order.status.value if order.status else "Unknown"
+                order_type = order.type.value if order.type else "Unknown"
+                qty = order.quantity or 0
+                filled_qty = order.filledQuantity or 0
+                fill_status = "FILLED" if is_filled else "NOT FILLED"
+                hover_texts.append(
+                    f"<b>{side.value} Order ({ticker_name})</b><br>"
+                    f"Status: {status} ({fill_status})<br>"
+                    f"Type: {order_type}<br>"
+                    f"Price: €{price:.2f}<br>"
+                    f"Qty: {filled_qty}/{qty}<br>"
+                    f"Time: {order.createdAt.strftime('%H:%M:%S')}"
+                )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=times,
+                    y=prices,
+                    mode="markers",
+                    name=f"{side.value} Orders ({ticker_name})",
+                    marker=dict(
+                        color=color,
+                        size=12,
+                        symbol=symbols,
+                        line=dict(width=2, color=color),
+                    ),
+                    hovertemplate="%{text}<extra></extra>",
+                    text=hover_texts,
+                ),
+                secondary_y=is_secondary,
+                row=1,
+                col=1,
+            )
 
 # Leverage divergence trace
 fig.add_trace(
