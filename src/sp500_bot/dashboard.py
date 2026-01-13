@@ -136,7 +136,7 @@ def process_data(all_data):
         d = datetime.fromisoformat(row["created_at"]).date()
         t = datetime.fromisoformat(row["created_at"])
         positions = {
-            Position.model_validate_json(p).ticker: Position.model_validate_json(p)
+            Position.model_validate_json(p).instrument.ticker: Position.model_validate_json(p)
             for p in row["positions"]
         }
         if BASE_TICKER in positions and LEV_TICKER in positions:
