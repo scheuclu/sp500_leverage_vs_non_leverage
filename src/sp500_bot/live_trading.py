@@ -134,16 +134,31 @@ class ReadyToInvest(TraderState):
         ):
             # Make Investment
             cash: Cash = fetch_account_cash()
-            quantity: float = (cash.availableToTrade or 0) /base_position.currentPrice
+            available = cash.availableToTrade
+            current_price = base_position.currentPrice
+            lev_current_price = lev_position.currentPrice
+            logging.info(f"Cash available: {available}, current price: {current_price}")
+            if available is None or current_price is None or lev_current_price is None or available <= 0:
+                logging.warning(
+                    f"Cannot place order: availableToTrade={available}, currentPrice={current_price}"
+                )
+                return self  # Stay in ReadyToInvest state
+            assert available is not None and current_price is not None and lev_current_price is not None
+            quantity: float = available / current_price
+            if quantity * 0.9 < 0.01:  # Minimum order quantity check
+                logging.warning(
+                    f"Insufficient cash to place order. Available: {available}, quantity would be: {quantity * 0.9}"
+                )
+                return self  # Stay in ReadyToInvest state
             send_message(
-                f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
+                f"Placing an order for {quantity} at {current_price * 1.0001}. Lev went up by factor {lev_diff_rel}"
             )
             try:
                 buy_order = place_limit_order(
                     LimitOrder(
                         ticker=BASE_TICKER,
                         quantity=quantity * 0.9,  # TODO
-                        limit_price=base_position.currentPrice * (1 + LEV_DIFF_INVEST / 8),
+                        limit_price=current_price * (1 + LEV_DIFF_INVEST / 8),
                         type=LimitOrderType.BUY,
                     )
                 )
@@ -157,8 +172,8 @@ class ReadyToInvest(TraderState):
                     return InvestedInNonLeverage(
                         signal_data=SignalData(
                             time_last_base_change=curdatetime,
-                            base_value_at_last_change=base_position.currentPrice,
-                            lev_value_at_last_change=lev_position.currentPrice,
+                            base_value_at_last_change=current_price,
+                            lev_value_at_last_change=lev_current_price,
                         )
                     )
             except Exception as e:
