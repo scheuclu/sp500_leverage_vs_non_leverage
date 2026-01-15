@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-from sp500_bot.models import Position, Order, Cash
+from sp500_bot.models import Position, Order, AccountSummary
 from sp500_bot.sb import write_positions, write_state
 from sp500_bot.t212 import (
     fetch_instruments,
@@ -21,7 +21,7 @@ from sp500_bot.t212 import (
     LimitOrderType,
     has_order_been_filled,
     cancel_order_by_id,
-    fetch_account_cash,
+    fetch_account_summary,
     cancel_open_orders,
     place_market_order,
     MarketOrder,
@@ -133,8 +133,11 @@ class ReadyToInvest(TraderState):
             and curdatetime - self.signal_data.time_last_base_change > TIME_DIFF_INVEST
         ):
             # Make Investment
-            cash: Cash = fetch_account_cash()
-            quantity: float = (cash.availableToTrade or 0) /base_position.currentPrice
+            account_summary: AccountSummary = fetch_account_summary()
+            assert account_summary.cash.availableToTrade > 0, (
+                f"There is not cash available to trade. Account summary: {account_summary}"
+            )
+            quantity: float = account_summary.cash.availableToTrade / base_position.currentPrice
             send_message(
                 f"Placing an order for {quantity} at {base_position.currentPrice * 1.0001}. Lev went up by factor {lev_diff_rel}"
             )

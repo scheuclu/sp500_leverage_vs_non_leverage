@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from sp500_bot.models import (
     Order,
     Position,
-    Cash,
+    AccountSummary,
     TradableInstrument,
     Exchange,
     HistoricalOrder,
@@ -44,7 +44,7 @@ class RateLimiter:
 
     # Rate limits from api.json (in seconds)
     LIMITS: dict[str, float] = {
-        "account_cash": 2.0,
+        "account_summary": 5.0,
         "account_info": 30.0,
         "exchanges": 30.0,
         "instruments": 50.0,
@@ -184,14 +184,14 @@ def fetch_single_holding(ticker: Trading212Ticker) -> Position | None:
     return Position(**response.json())
 
 
-def fetch_account_cash() -> Cash:
-    url = "https://demo.trading212.com/api/v0/equity/account/cash"
-    _rate_limiter.wait("account_cash")
+def fetch_account_summary() -> AccountSummary:
+    url = "https://demo.trading212.com/api/v0/equity/account/summary"
+    _rate_limiter.wait("account_summary")
     logging.debug("Calling fetch_account_cash()")
     response = requests.get(url, headers=headers)
     response.raise_for_status()
 
-    return Cash(**response.json())
+    return AccountSummary(**response.json())
 
 
 class LimitOrderType(Enum):
@@ -365,9 +365,7 @@ def fetch_historical_orders(
 
 
 if __name__ == "__main__":
-
-
-    positions=fetch_positions()
+    positions = fetch_positions()
 
     historical_orders = fetch_historical_orders(
         ticker=Trading212Ticker.SP500_EUR,
