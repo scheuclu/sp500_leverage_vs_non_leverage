@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from enum import Enum
+from typing import Any
 
 import requests
 from pydantic import BaseModel, Field
@@ -28,6 +29,27 @@ logging.basicConfig(
     style="{",
     force=True,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _log_request(method: str, url: str, payload: dict[str, Any] | None = None) -> None:
+    """Log outgoing API request details."""
+    if payload:
+        logger.info(f"API REQUEST: {method} {url} | payload={payload}")
+    else:
+        logger.info(f"API REQUEST: {method} {url}")
+
+
+def _log_response(response: requests.Response, truncate_body: int = 500) -> None:
+    """Log API response details including status and body."""
+    body = (
+        response.text[:truncate_body] + "..."
+        if len(response.text) > truncate_body
+        else response.text
+    )
+    logger.info(f"API RESPONSE: status={response.status_code} | body={body}")
+
 
 TRADING212_KEY = os.environ["TRADING212_KEY"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
@@ -98,8 +120,9 @@ class Trading212Ticker(Enum):
 def cancel_order_by_id(order_id: int) -> bool:
     url = "https://demo.trading212.com/api/v0/equity/orders/" + str(order_id)
     _rate_limiter.wait("orders_cancel")
-    logging.debug(f"Calling cancel_order_by_id({order_id})")
+    _log_request("DELETE", url)
     response = requests.delete(url, headers=headers)
+    _log_response(response)
     response.raise_for_status()
     return response.status_code == 200
 
@@ -107,8 +130,9 @@ def cancel_order_by_id(order_id: int) -> bool:
 def fetch_open_orders() -> list[Order]:
     url = "https://demo.trading212.com/api/v0/equity/orders"
     _rate_limiter.wait("orders_get")
-    logging.debug("Calling fetch_open_orders()")
+    _log_request("GET", url)
     response = requests.get(url, headers=headers)
+    _log_response(response)
     response.raise_for_status()
 
     data = response.json()
@@ -131,8 +155,9 @@ def place_buy_order(ticker: Trading212Ticker, quantity: float) -> Order:
         "ticker": ticker.value,  # "AAPL_US_EQ"
     }
     _rate_limiter.wait("orders_market")
-    logging.debug(f"Calling place_buy_order({ticker}, {quantity})")
+    _log_request("POST", url, payload)
     response = requests.post(url, json=payload, headers=headers)
+    _log_response(response)
     response.raise_for_status()
 
     data = response.json()
@@ -153,8 +178,9 @@ def place_sell_order(ticker: Trading212Ticker, quantity: float, stop_price: floa
         "timeValidity": "DAY",
     }
     _rate_limiter.wait("orders_stop")
-    logging.debug(f"Calling place_sell_order({ticker}, {quantity}, {stop_price})")
+    _log_request("POST", url, payload)
     response = requests.post(url, json=payload, headers=headers)
+    _log_response(response)
     response.raise_for_status()
 
     data = response.json()
@@ -164,8 +190,9 @@ def place_sell_order(ticker: Trading212Ticker, quantity: float, stop_price: floa
 def fetch_positions() -> list[Position]:
     url = "https://demo.trading212.com/api/v0/equity/positions"
     _rate_limiter.wait("positions")
-    logging.debug("Calling fetch_positions()")
+    _log_request("GET", url)
     response = requests.get(url, headers=headers)
+    _log_response(response)
     response.raise_for_status()
 
     return [Position(**d) for d in response.json()]
@@ -176,9 +203,11 @@ def fetch_single_holding(ticker: Trading212Ticker) -> Position | None:
 
     payload = {"ticker": ticker.value}
     _rate_limiter.wait("portfolio_ticker")
-    logging.debug(f"Calling fetch_single_holding({ticker})")
+    _log_request("POST", url, payload)
     response = requests.post(url, json=payload, headers=headers)
+    _log_response(response)
     if response.status_code == 404:
+        logger.info(f"No holding found for ticker {ticker.value}")
         return None
     response.raise_for_status()
     return Position(**response.json())
@@ -187,8 +216,9 @@ def fetch_single_holding(ticker: Trading212Ticker) -> Position | None:
 def fetch_account_summary() -> AccountSummary:
     url = "https://demo.trading212.com/api/v0/equity/account/summary"
     _rate_limiter.wait("account_summary")
-    logging.debug("Calling fetch_account_cash()")
+    _log_request("GET", url)
     response = requests.get(url, headers=headers)
+    _log_response(response)
     response.raise_for_status()
 
     return AccountSummary(**response.json())
@@ -231,17 +261,16 @@ def place_limit_order(order: LimitOrder) -> Order:
     }
 
     _rate_limiter.wait("orders_limit")
-    logging.debug(f"Calling place_limit_order({order})")
-    logging.info(payload)
-
+    _log_request("POST", url, payload)
     send_message(f"Placing limit order: {payload}")
 
     response = requests.post(url, json=payload, headers=headers)
-    send_message(f".... {response.text}")
+    _log_response(response)
+    send_message(f"Limit order response: {response.text}")
     response.raise_for_status()
 
     data = response.json()
-    logging.info(data)
+    logger.info(f"Limit order created: id={data.get('id')}")
     return Order(**data)
 
 
@@ -258,26 +287,25 @@ def place_market_order(order: MarketOrder) -> Order:
     }
 
     _rate_limiter.wait("orders_market")
-    logging.debug(f"Calling place_market_order({order})")
-    logging.info(payload)
-
-    message = f"Placing market order: {payload}"
-    logging.info(f"Sending message: {message}")
-    send_message(message)
+    _log_request("POST", url, payload)
+    send_message(f"Placing market order: {payload}")
 
     response = requests.post(url, json=payload, headers=headers)
-    send_message(f".... {response.text}")
+    _log_response(response)
+    send_message(f"Market order response: {response.text}")
     response.raise_for_status()
 
     data = response.json()
+    logger.info(f"Market order created: id={data.get('id')}")
     return Order(**data)
 
 
 def fetch_open_order(order_id: int) -> Order:
     url = f"https://demo.trading212.com/api/v0/equity/orders/{order_id}"
     _rate_limiter.wait("order_by_id")
-    logging.debug(f"Calling fetch_open_order({order_id})")
+    _log_request("GET", url)
     response = requests.get(url, headers=headers)
+    _log_response(response)
     response.raise_for_status()
 
     data = response.json()
@@ -287,28 +315,35 @@ def fetch_open_order(order_id: int) -> Order:
 def has_order_been_filled(order_id: int) -> bool:
     url = f"https://demo.trading212.com/api/v0/equity/orders/{order_id}"
     _rate_limiter.wait("order_by_id")
-    logging.debug(f"Calling has_order_been_filled({order_id})")
+    _log_request("GET", url)
     response = requests.get(url, headers=headers)
-    return response.status_code == 404
+    _log_response(response)
+    filled = response.status_code == 404
+    logger.info(f"Order {order_id} filled: {filled}")
+    return filled
 
 
 def fetch_instruments() -> dict[str, TradableInstrument]:
     url = "https://demo.trading212.com/api/v0/equity/metadata/instruments"
     _rate_limiter.wait("instruments")
-    logging.debug("Calling fetch_instruments()")
+    _log_request("GET", url)
     response = requests.get(url, headers=headers)
+    _log_response(response, truncate_body=200)  # Large response, truncate more
     response.raise_for_status()
     instruments = {d["ticker"]: TradableInstrument(**d) for d in response.json()}
+    logger.info(f"Fetched {len(instruments)} instruments")
     return instruments
 
 
 def fetch_exchanges() -> list[Exchange]:
     url = "https://demo.trading212.com/api/v0/equity/metadata/exchanges"
     _rate_limiter.wait("exchanges")
-    logging.debug("Calling fetch_exchanges()")
+    _log_request("GET", url)
     response = requests.get(url, headers=headers)
+    _log_response(response)
     response.raise_for_status()
     exchanges = [Exchange(**d) for d in response.json()]
+    logger.info(f"Fetched {len(exchanges)} exchanges")
     return exchanges
 
 
@@ -335,7 +370,7 @@ def fetch_historical_orders(
 
     # start_time = int(1000* datetime.datetime.combine(start_date, datetime.datetime.min.time()).timestamp())
     end_time = int(
-        1000 * datetime.datetime.combine(end_date, datetime.datetime.max.time()).timestamp()
+        1000 * datetime.datetime.combine(end_date, datetime.datetime.max.time()).timestamp()  # type: ignore[arg-type]
     )
 
     results: list[HistoricalOrder] = []
@@ -347,12 +382,17 @@ def fetch_historical_orders(
     }
     nextPagePath = f"{url}?{urlencode(query=query)}"
 
+    page_num = 0
     while nextPagePath:
+        _log_request("GET", nextPagePath)
         response = requests.get(nextPagePath, headers=headers)
+        _log_response(response)
         response.raise_for_status()
         _rate_limiter.wait("historical_orders")
+        page_num += 1
 
         paginated = PaginatedResponseHistoricalOrder(**response.json())
+        logger.info(f"Historical orders page {page_num}: {len(paginated.items)} items")
         if len(paginated.items) == 0:
             nextPagePath = None
         else:
@@ -361,6 +401,8 @@ def fetch_historical_orders(
             results += orders
             if len(orders) < len(paginated.items):
                 nextPagePath = None  # Some orders where at a different date
+
+    logger.info(f"Fetched {len(results)} historical orders for {ticker.value}")
     return results
 
 
