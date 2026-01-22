@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Automated algorithmic trading bot that trades S&P 500 ETFs comparing leveraged vs non-leveraged positions using the Trading 212 API, with data storage in Supabase.
 
-**Key Business Logic:** The bot implements a statistical arbitrage strategy that monitors price differences between a non-leveraged S&P 500 ETF (1x) and a leveraged version (3x). When the leveraged asset diverges >0.4% from expected behavior over 2+ minutes, the bot places buy/sell orders to capitalize on mean reversion patterns.
+**Key Business Logic:** The bot implements an "always invested" statistical arbitrage strategy that continuously holds either a non-leveraged S&P 500 ETF (1x) OR a leveraged version (3x). It monitors price divergence between the two assets and swaps positions based on mean reversion signals. The leveraged ETF is the default holding (for higher returns in bull markets), switching to non-leveraged when leveraged overperforms, and switching back when conditions normalize.
 
 ## Project Structure
 
@@ -52,26 +52,51 @@ pyright
 ## Architecture
 
 ### State Pattern (live_trading.py)
-The bot uses a class-based State Pattern. Each state is a class inheriting from `TraderState` with a `process()` method that returns the next state:
+The bot uses a class-based State Pattern implementing an "always invested" strategy. Each state is a class inheriting from `TraderState` with a `process()` method that returns the next state:
 
 ```
 TraderState (ABC)
-├── Initializing           → ReadyToInvest
-├── ReadyToInvest          → self | OrderFailed | InvestedInNonLeverage
-├── InvestedInNonLeverage  → self | Initializing | OrderFailed
-└── OrderFailed            → Initializing
+├── Initializing        → HoldingLeveraged | HoldingNonLeveraged | self
+├── HoldingLeveraged    → self | HoldingNonLeveraged
+└── HoldingNonLeveraged → self | HoldingLeveraged
 ```
 
-State transitions:
-- `Initializing`: Cancels open orders, sells excess holdings → `ReadyToInvest`
-- `ReadyToInvest`: Monitors leveraged asset divergence, places buy order when threshold met → `InvestedInNonLeverage`
-- `InvestedInNonLeverage`: Waits for base price change, places sell order → `Initializing`
-- `OrderFailed`: Recovery state → `Initializing`
+#### State Descriptions
+
+**Initializing**
+- Cancels open orders, determines current holdings
+- If already holding non-leveraged → `HoldingNonLeveraged`
+- If already holding leveraged → `HoldingLeveraged`
+- If holding cash → buys leveraged (market order) → `HoldingLeveraged` (or stays in `Initializing` if order fails)
+
+**HoldingLeveraged** (Default/Primary Holding)
+- Holds the 3x leveraged ETF (higher returns in bull markets)
+- Monitors for positive divergence (leveraged overperforming)
+- If base price changes → update reference, stay
+- If leveraged diverges UP > +0.4% for > 2 min → SWAP to `HoldingNonLeveraged`
+  - Uses market orders; stays in current state if swap fails
+  - Rationale: Leveraged overperforming, expect mean reversion
+
+**HoldingNonLeveraged** (Temporary Hedge Position)
+- Holds the 1x non-leveraged ETF as a hedge
+- Monitors for multiple exit conditions:
+  - If base price > entry price → SWAP to `HoldingLeveraged` (take profit)
+  - If leveraged diverges DOWN < -0.4% for > 2 min → SWAP to `HoldingLeveraged` (capture recovery)
+  - If stop-loss triggered (base < entry - 0.5%) → SWAP to `HoldingLeveraged`
+  - If base price changed (not up) → update divergence reference, stay
+- Uses market orders; stays in current state if swap fails
+
+#### Divergence Calculation
+```python
+lev_diff_rel = (lev_current - lev_at_last_base_change) / lev_at_last_base_change
+```
+- Positive divergence: Leveraged went UP while base stayed flat → swap to non-leveraged
+- Negative divergence: Leveraged went DOWN while base stayed flat → swap to leveraged
 
 The main loop simply calls `trader_state.process(base_position, lev_position, curdatetime)` each iteration.
 
 ### Core Modules
-- **sp500_bot.live_trading** - Main trading bot with State Pattern, limit orders, Telegram notifications
+- **sp500_bot.live_trading** - Main trading bot with State Pattern, market orders, Telegram notifications
 - **sp500_bot.t212** - Trading 212 API wrapper with built-in rate limiting
 - **sp500_bot.models** - Auto-generated Pydantic models from api.json using datamodel-codegen
 - **sp500_bot.utils** - Exchange schedule utilities (market open checks)
@@ -104,12 +129,21 @@ Rate limits are defined in `RateLimiter.LIMITS` and derived from `api.json`.
 
 ### Key Parameters (live_trading.py)
 ```python
-LEV_DIFF_INVEST = 0.004        # 0.4% divergence threshold to trigger buy
-TIME_DIFF_INVEST = timedelta(minutes=2)  # Min time before buying
-STOP_LOSS_THRESHOLD = 0.005   # 0.5% - sell if base drops this much below buy price
+LEV_DIFF_INVEST = 0.004        # 0.4% divergence threshold to trigger swap
+TIME_DIFF_INVEST = timedelta(minutes=2)  # Min time before swapping
+STOP_LOSS_THRESHOLD = 0.005   # 0.5% - swap if base drops this much below entry price
 BASE_TICKER = Trading212Ticker.SP500_EUR    # 1x ETF (VUAAm_EQ)
 LEV_TICKER = Trading212Ticker.SP500_EUR_L   # 3x ETF (US5Ld_EQ)
 INTERVAL = 20  # seconds between trading loops
+```
+
+### Signal Data Structure
+```python
+class SignalData:
+    time_last_base_change: datetime  # When base price last changed
+    base_value_at_last_change: float  # Base price at that time (divergence reference)
+    lev_value_at_last_change: float   # Lev price at that time (divergence reference)
+    position_entry_price: float       # Entry price of current position (for P&L)
 ```
 
 ## Technology Stack
@@ -132,7 +166,9 @@ Required in `.env`:
 ## Important Notes
 
 - Uses demo.trading212.com, not production API
-- State is not persisted; relies on position queries to recover after restart
+- State is not persisted; relies on position queries to recover after restart (Initializing state detects current holdings)
 - Exchange schedules (TimeEvent objects) determine trading hours - trading blocked when markets closed
-- Limit orders preferred over market orders (with 3-minute timeout before cancellation)
-- Order fulfillment detection via 404 response (filled orders return 404)
+- Market orders used for all trades (immediate execution)
+- Order verification via position value comparison after 5 second wait
+- **Always Invested Strategy**: The bot never holds cash (except briefly during swaps). It always holds either leveraged (default) or non-leveraged ETF.
+- **Bidirectional Swaps**: Unlike previous versions, the bot can swap in both directions based on divergence signals (positive divergence → non-leveraged, negative divergence → leveraged)
