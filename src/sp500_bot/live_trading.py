@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
@@ -25,13 +26,39 @@ from sp500_bot.t212 import (
 from sp500_bot.utils import are_positions_tradeable
 from sp500_bot.tgbot import send_message
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="{levelname}:{name}:{filename}:{lineno}: {message}",
-    style="{",
-    force=True,
-)
 
+def setup_logging():
+    """Configure logging with both console and rotating file handlers."""
+    log_format = "{levelname}:{name}:{filename}:{lineno}: {message}"
+    formatter = logging.Formatter(log_format, style="{")
+
+    # Get root logger to capture all logs (including from t212.py)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    # Clear any existing handlers
+    root_logger.handlers.clear()
+
+    # Console handler (INFO level)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # Rotating file handler (DEBUG level for more detail)
+    # 5 MB per file, keep 5 backup files (25 MB total max)
+    file_handler = RotatingFileHandler(
+        "trading_bot.log",
+        maxBytes=5 * 1024 * 1024,  # 5 MB
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
+
+
+setup_logging()
 logger = logging.getLogger(__name__)
 
 load_dotenv()
